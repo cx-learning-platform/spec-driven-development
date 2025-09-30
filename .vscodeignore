@@ -1,0 +1,98 @@
+# Source files
+src/**
+tsconfig.json
+.vscode/launch.json
+.vscode/extensions.json
+
+# Build artifacts
+node_modules/**
+.gitignore
+
+# Test files
+test-files/**
+
+# Development files
+PUBLISHING.md
+
+# Git files
+.git/
+.github/
+
+# npm files
+.npmignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# next.js build output
+.next
+
+# nuxt.js build output
+.nuxt
+
+# vuepress build output
+.vuepress/dist
+
+# Serverless directories
+.serverless
+
+# FuseBox cache
+.fusebox/
+
+# DynamoDB Local files
+.dynamodb/
+
+# TernJS port file
+.tern-port
+
+# Webpack
+webpack.config.js
+
+# Development tools
+.eslintrc.json
+
+# Keep these files for the extension
+!resources/**
+!out/**
+!README.md
+!CHANGELOG.md
+!overview.md
+!LICENSE
+!icon.png
+!package.json

@@ -1,0 +1,197 @@
+{
+	"servers": {
+		// AI-powered task management and automation assistant with support for multiple LLM providers
+		// Source: https://www.task-master.dev/
+		"task-master-ai": {
+			"command": "npx",
+			"args": [
+				"-y",
+				"--package=task-master-ai",
+				"task-master-ai"
+			],
+			"env": {
+				"ANTHROPIC_API_KEY": "YOUR_ANTHROPIC_API_KEY_HERE",
+				"PERPLEXITY_API_KEY": "YOUR_PERPLEXITY_API_KEY_HERE",
+				"OPENAI_API_KEY": "YOUR_OPENAI_KEY_HERE",
+				"GOOGLE_API_KEY": "YOUR_GOOGLE_KEY_HERE",
+				"XAI_API_KEY": "YOUR_XAI_KEY_HERE",
+				"OPENROUTER_API_KEY": "YOUR_OPENROUTER_KEY_HERE",
+				"MISTRAL_API_KEY": "YOUR_MISTRAL_KEY_HERE",
+				"AZURE_OPENAI_API_KEY": "YOUR_AZURE_KEY_HERE",
+				"OLLAMA_API_KEY": "YOUR_OLLAMA_API_KEY_HERE"
+			},
+			"disabled": false,
+			"autoApprove": [],
+			"type": "stdio"
+		},
+		// Provides current time, date, timezone conversion, and temporal calculations
+		// Source: https://github.com/modelcontextprotocol/servers/tree/main/src/time
+		"time": {
+			"command": "uvx",
+			"args": [
+				"mcp-server-time"
+			],
+			"type": "stdio"
+		},
+		// Infrastructure as code management with Terraform plan, apply, and state operations
+		// Source: https://github.com/awslabs/mcp/tree/main/src/terraform-mcp-server
+		"Terraform MCP Server": {
+			"command": "uvx",
+			"args": [
+				"--from",
+				"awslabs.terraform-mcp-server",
+				"python",
+				"-m",
+				"awslabs.terraform_mcp_server.server"
+			],
+			"env": {
+				"FASTMCP_LOG_LEVEL": "ERROR"
+			},
+			"disabled": false,
+			"autoApprove": [],
+			"type": "stdio"
+		},
+		// AWS documentation search and retrieval service with comprehensive service coverage
+		// Source: https://github.com/awslabs/mcp/tree/main/src/aws-documentation-mcp-server
+		"awslabs.aws-documentation-mcp-server": {
+            "command": "uvx",
+            "args": [
+                "--from",
+                "awslabs-aws-documentation-mcp-server",
+                "awslabs.aws-documentation-mcp-server.exe"
+            ],
+            "env": {
+                "FASTMCP_LOG_LEVEL": "ERROR",
+                "AWS_DOCUMENTATION_PARTITION": "aws"
+            },
+            "disabled": false,
+            "autoApprove": [],
+            "type": "stdio"
+        },
+		// Amazon EKS cluster management with Kubernetes operations, pod logs, and CloudWatch integration.
+		// Source: https://github.com/awslabs/mcp/tree/main/src/eks-mcp-server
+		"EKS MCP Server": {
+			"autoApprove": [
+				"manage_eks_stacks",
+				"manage_k8s_resource",
+				"list_k8s_resources",
+				"get_pod_logs",
+				"get_k8s_events",
+				"get_cloudwatch_logs",
+				"get_cloudwatch_metrics",
+				"get_policies_for_role",
+				"search_eks_troubleshoot_guide",
+				"list_api_versions"
+			],
+			"disabled": false,
+			"command": "uvx",
+			"args": [
+				"--from",
+				"awslabs.eks-mcp-server",
+				"python",
+				"-m",
+				"awslabs.eks_mcp_server.server",
+				"--allow-sensitive-data-access"
+			],
+			"env": {
+				"AWS_PROFILE": "YOUR_AWS_PROFILE_HERE",
+				"AWS_REGION": "us-east-1",
+				"FASTMCP_LOG_LEVEL": "ERROR"
+			},
+			"type": "stdio"
+		},
+		// AWS architecture diagram generation and visualization for infrastructure documentation
+		// Source: https://github.com/awslabs/mcp/tree/main/src/aws-diagram-mcp-server
+		"AWS Diagram MCP Server": {
+			"command": "uvx",
+			"args": [
+				"awslabs.aws-diagram-mcp-server"
+			],
+			"env": {
+				"FASTMCP_LOG_LEVEL": "ERROR"
+			},
+			"autoApprove": [],
+			"disabled": false,
+			"type": "stdio"
+		},
+		// Amazon Redshift data warehouse management with cluster operations and SQL querying capabilities
+		// Source: https://github.com/awslabs/mcp/tree/main/src/redshift-mcp-server
+		"Redshift MCP Server": {
+			"command": "uvx",
+			"args": [
+				"--from",
+				"awslabs.redshift-mcp-server",
+				"python",
+				"-m",
+				"awslabs.redshift_mcp_server.server"
+			],
+			"env": {
+				"AWS_PROFILE": "YOUR_AWS_PROFILE_HERE",
+				"AWS_REGION": "us-east-1",
+				"AWS_DEFAULT_REGION": "us-east-1",
+				"FASTMCP_LOG_LEVEL": "DEBUG"
+			},
+			"disabled": false,
+			"autoApprove": [
+				"list_clusters",
+				"describe_cluster",
+				"list_databases",
+				"list_tables"
+			],
+			"type": "stdio"
+		},
+		// Library documentation and code context retrieval with intelligent semantic search
+		// Source: https://github.com/upstash/context7
+		"context7": {
+			"command": "npm",
+			"args": [
+				"exec",
+				"--yes",
+				"@upstash/context7-mcp@latest"
+			],
+			"type": "stdio",
+			"disabled": true,
+			"autoApprove": []
+		},
+		// Security vulnerability scanning and assessment for containers and infrastructure
+		// Source: https://github.com/aquasecurity/trivy-mcp
+        "Trivy MCP": {
+         "command": "trivy",
+         "args": [
+            "mcp"
+         ]
+      },
+	  // Web browser automation and testing framework with cross-browser support and headless operations
+	  // Source: https://github.com/microsoft/playwright-mcp
+	  "playwright": {
+          "command": "npx",
+          "args": ["@playwright/mcp@latest"],
+          "type": "stdio"
+        },
+		// Redis database operations and caching management with key-value store functionality
+		// Source: https://github.com/redis/mcp-redis
+		"MCP-Redis": {
+			"type": "stdio",
+			"command": "npx",
+			"args": ["-y", "@modelcontextprotocol/server-redis", "redis://localhost:6379"]
+		},
+		// AWS CloudTrail log analysis and event querying service for security and compliance monitoring
+		// Source: https://github.com/awslabs/mcp/tree/main/src/cloudtrail-mcp-server
+		"awslabs.cloudtrail-mcp-server": {
+			"command": "uvx",
+			"args": [
+				"--from",
+				"awslabs.cloudtrail-mcp-server",
+				"python",
+				"-m",
+				"awslabs.cloudtrail_mcp_server.server"
+			],
+			"env": {
+				"AWS_PROFILE": "YOUR_AWS_PROFILE_HERE",
+				"AWS_REGION": "us-east-1",
+				"FASTMCP_LOG_LEVEL": "ERROR"
+			}
+		}
+	},
+	"inputs": []
+}

@@ -1,0 +1,399 @@
+{
+  "name": "vibe-sync-code",
+  "displayName": "Vibe Sync Code",
+  "description": "Supercharge GitHub Copilot with intelligent, context-aware coding instructions and workspace enhancement",
+  "version": "1.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vibe-tech/vibe-code-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vibe-tech/vibe-code-plugin/issues"
+  },
+  "homepage": "https://github.com/vibe-tech/vibe-code-plugin#readme",
+  "publisher": "Gen-Ai-publisher",
+  "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Education"
+  ],
+  "keywords": [
+    "copilot",
+    "assistant",
+    "code-quality",
+    "best-practices",
+    "go",
+    "python",
+    "terraform"
+  ],
+  "activationEvents": [
+    "onLanguage:go",
+    "onLanguage:python",
+    "onLanguage:terraform",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:bash",
+    "onLanguage:shellscript",
+    "workspaceContains:**/*.go",
+    "workspaceContains:**/*.py",
+    "workspaceContains:**/*.tf",
+    "workspaceContains:package.json",
+    "workspaceContains:go.mod"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vibeAssistant.analyzeCode",
+        "title": "Analyze Code & Apply Instructions",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.suggestPrompt",
+        "title": "Apply Contextual Prompts",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.openInstructions",
+        "title": "Open Instructions Panel",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.applyCopilotInstructions",
+        "title": "Apply Copilot Instructions",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.showPromptSidebar",
+        "title": "Show Prompts Sidebar",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.applyResourceFiles",
+        "title": "Add Workspace Guidelines",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.openPanel",
+        "title": "Open Vibe Assistant Panel",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.connectAWS",
+        "title": "Connect to AWS",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.refreshAWSConnection",
+        "title": "Refresh AWS Connection",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.listAWSSecrets",
+        "title": "List AWS Secrets",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.retrySalesforceCredentials",
+        "title": "Retry Salesforce Credentials",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.updateJiraIssue",
+        "title": "Update JIRA Issue",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.submitFeedback",
+        "title": "Submit Feedback",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.viewFeedbackHistory",
+        "title": "View Feedback History",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.exportFeedbackHistory",
+        "title": "Export Feedback History",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.clearFeedbackHistory",
+        "title": "Clear Feedback History",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.configureGitHubToken",
+        "title": "Configure GitHub Token",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.parseCopilotEstimation",
+        "title": "Parse Copilot Estimation from Chat",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.analyzeFolderCode",
+        "title": "Analyze Folder & Apply Instructions",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.analyzeWorkspaceCode", 
+        "title": "Analyze Workspace & Apply Instructions",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.applyFolderPrompts",
+        "title": "Apply Folder Contextual Prompts",
+        "category": "Vibe Assistant"
+      },
+      {
+        "command": "vibeAssistant.applyWorkspacePrompts",
+        "title": "Apply Workspace Contextual Prompts", 
+        "category": "Vibe Assistant"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "vibeAssistant.analyzeCode",
+          "group": "vibe@1",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "vibeAssistant.suggestPrompt",
+          "group": "vibe@2",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "vibeAssistant.applyResourceFiles",
+          "group": "vibe@3",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "vibeAssistant.openPanel",
+          "group": "vibe@4",
+          "when": "editorTextFocus"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "vibeAssistant.analyzeFolderCode",
+          "group": "vibe@1",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vibeAssistant.applyFolderPrompts",
+          "group": "vibe@2",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "vibeAssistant.applyResourceFiles",
+          "group": "vibe@3",
+          "when": "explorerResourceIsFolder"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "vibeAssistant.applyCopilotInstructions",
+          "group": "navigation@1",
+          "when": "resourceExtname =~ /\\.(go|py|tf|sh|bash|js|ts)$/"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "vibeAssistant.analyzeCode",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "vibeAssistant.suggestPrompt",
+          "when": "editorIsOpen"
+        }
+      ]
+    },
+    "views": {
+      "vibeAssistant": [
+        {
+          "id": "vibeAssistantPanel",
+          "type": "webview",
+          "name": "Vibe Assistant",
+          "when": "true",
+          "icon": "$(dashboard)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vibeAssistant",
+          "title": "Vibe Assistant",
+          "icon": "$(dashboard)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Spec Driven Development",
+      "properties": {
+        "vibeAssistant.autoApplyInstructions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically apply relevant instructions when opening files"
+        },
+        "vibeAssistant.enableContextualPrompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable contextual prompt suggestions"
+        },
+        "vibeAssistant.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications when instructions are applied"
+        },
+        "vibeAssistant.supportedLanguages": {
+          "type": "array",
+          "default": [
+            "go",
+            "python",
+            "terraform",
+            "bash",
+            "javascript",
+            "typescript"
+          ],
+          "description": "List of supported programming languages"
+        },
+        "vibeAssistant.autoIgnoreAIFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically add AI instruction files to .gitignore to keep repositories clean"
+        },
+        "vibeAssistant.awsProfile": {
+          "type": "string",
+          "default": "",
+          "description": "AWS CLI profile to use for authentication (leave empty to use default profile)"
+        },
+        "vibeAssistant.awsRegion": {
+          "type": "string",
+          "default": "",
+          "description": "AWS region for services (leave empty to use default region from AWS CLI)"
+        },
+        "vibeAssistant.salesforceSecretName": {
+          "type": "string",
+          "default": "salesforce",
+          "description": "Name of the AWS Secrets Manager secret containing Salesforce credentials"
+        },
+        "vibeAssistant.salesforceSecretKeywords": {
+          "type": "array",
+          "default": ["salesforce", "sf", "crm", "sales", "force"],
+          "description": "Keywords to search for when looking for Salesforce secrets (fallback if exact name not found)"
+        },
+        "vibeAssistant.enableEstimationParsing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically parse time estimations from Copilot responses"
+        },
+        "vibeAssistant.enableAutoDocumentParsing": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically scan documents for estimations when they change (may cause unwanted notifications)"
+        },
+        "vibeAssistant.jiraAutoUpdate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically update JIRA issues when estimations are detected"
+        },
+        "vibeAssistant.notifications.showProgress": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show progress notifications during operations"
+        },
+        "vibeAssistant.notifications.showSuccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show success notifications after operations complete"
+        },
+        "vibeAssistant.notifications.showErrors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show error notifications when operations fail"
+        },
+        "vibeAssistant.notifications.consolidateMessages": {
+          "type": "boolean",
+          "default": true,
+          "description": "Consolidate multiple related notifications into one"
+        },
+        "vibeAssistant.notifications.verboseMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show detailed information in notifications"
+        },
+        "vibeAssistant.githubToken": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub Personal Access Token for creating issues (requires 'repo' or 'public_repo' scope)"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "vibeAssistant.analyzeCode",
+        "key": "ctrl+shift+v a",
+        "mac": "cmd+shift+v a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "vibeAssistant.suggestPrompt",
+        "key": "ctrl+shift+v p",
+        "mac": "cmd+shift+v p",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package:webpack",
+    "compile": "tsc -p ./",
+    "compile:clean": "rimraf out && npm run compile",
+    "watch": "tsc -watch -p ./",
+    "package:webpack": "webpack --mode production --devtool hidden-source-map",
+    "watch:webpack": "webpack --watch",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts --fix",
+    "lint:check": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "clean": "rimraf out",
+    "dev": "npm run watch"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.2.0",
+    "@vscode/vsce": "^3.6.1",
+    "eslint": "^8.28.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^4.9.4",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "glob": "^8.0.3",
+    "yaml": "^2.2.1",
+    "aws-sdk": "^2.1460.0",
+    "node-fetch": "^3.3.2",
+    "@types/node-fetch": "^2.6.4",
+    "dotenv": "^16.3.1"
+  },
+  "extensionDependencies": []
+}
