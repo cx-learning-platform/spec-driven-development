@@ -349,9 +349,15 @@ aws secretsmanager get-secret-value --secret-id "salesforce"
 
 ### 🚀 **Development Setup** (For Contributors)
 
+## Pre Requisites:
+```
+Node >= v23.10.0
+npm  >= 10.9.2
+```
+
 ```bash
 # Clone and setup
-git clone https://github.com/Relanto-LKM-POC/spec-driven-development.git
+git clone git@github.com:cx-learning-platform/spec-driven-development.git
 cd spec-driven-development
 
 # Install dependencies
