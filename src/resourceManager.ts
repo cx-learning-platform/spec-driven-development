@@ -37,14 +37,14 @@ export class ResourceManager {
             await this.loadResourceFilesFromDirectory(
                 path.join(ResourceManager.EXTENSION_RESOURCES_PATH, ResourceManager.VSCODE_DIR),
                 'vscode',
-                ResourceManager.VSCODE_DIR
+                '.spec-driven-files/.vscode'
             );
 
             // Load how-to-guides files
             await this.loadResourceFilesFromDirectory(
                 path.join(ResourceManager.EXTENSION_RESOURCES_PATH, ResourceManager.HOWTO_DIR),
                 'howto',
-                ResourceManager.HOWTO_DIR
+                '.spec-driven-files/how-to-guides'
             );
 
             this.outputChannel.appendLine(`✅ Loaded ${this.resourceFiles.length} resource files`);

@@ -27,7 +27,7 @@ export class NotificationManager {
     }
 
     private loadNotificationConfig(): NotificationConfig {
-        const config = vscode.workspace.getConfiguration('vibeAssistant.notifications');
+        const config = vscode.workspace.getConfiguration('specDrivenDevelopment.notifications');
         return {
             showProgress: config.get('showProgress', true),
             showSuccess: config.get('showSuccess', true),

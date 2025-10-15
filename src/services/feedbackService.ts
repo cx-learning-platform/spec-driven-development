@@ -2,17 +2,29 @@ import * as vscode from 'vscode';
 import * as os from 'os';
 import { config } from '../utils/configurationManager';
 import { NotificationManager } from './notificationManager';
+import { JiraService } from './jiraService';
+import { AWSService } from './awsService';
 
 export interface FeedbackData {
-    issueType: 'bug' | 'feature' | 'feedback' | 'support';
-    priority: 'low' | 'medium' | 'high' | 'critical';
-    component: 'aws-integration' | 'jira-integration' | 'estimation-parser' | 'ui' | 'other';
+    name: string; // Component name for Salesforce
     description: string;
-    includeSystemInfo: boolean;
-    includeLogs: boolean;
-    includeAWSDetails: boolean;
-    submitAnonymously: boolean;
-    contactEmail?: string;
+    estimatedHours: number;
+    feedbackType: 'Story' | 'Bug' | 'Defect';
+    acceptanceCriteria?: string; // Only for Story type
+    initiativeId: string;
+    epicId: string;
+}
+
+export interface SalesforceInitiative {
+    id: string;
+    name: string;
+}
+
+export interface SalesforceEpic {
+    id: string;
+    name: string;
+    teamName: string;
+    initiativeId: string;
 }
 
 export interface SystemInfo {
@@ -30,26 +42,177 @@ export interface FeedbackSubmissionResult {
     success: boolean;
     message: string;
     ticketId?: string;
+    jiraUrl?: string;
     timestamp: string;
     error?: string;
 }
 
 export class FeedbackService {
     private context: vscode.ExtensionContext;
-    private readonly feedbackEndpoints: { [key: string]: string };
     private notificationManager: NotificationManager;
+    private jiraService: JiraService;
+    private awsService: AWSService;
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, awsService: AWSService) {
         this.context = context;
         this.notificationManager = NotificationManager.getInstance(context);
-        
-        // Get endpoints from configuration manager
-        const endpoints = config.getApiEndpoints().feedback;
-        this.feedbackEndpoints = {
-            github: endpoints.github,
-            internal: endpoints.internal,
-            analytics: endpoints.analytics
-        };
+        this.awsService = awsService;
+        this.jiraService = new JiraService(context, awsService);
+    }
+
+    /**
+     * Get list of initiatives from Salesforce
+     */
+    public async getInitiatives(): Promise<SalesforceInitiative[]> {
+        try {
+            // Check AWS connection status first
+            const awsStatus = await this.awsService.getRealTimeConnectionStatus();
+            if (!awsStatus.connected) {
+                throw new Error('AWS connection is required to load initiatives. Please connect to AWS first.');
+            }
+
+            // Check if Salesforce credentials are available
+            const salesforceCredentials = this.awsService.getSalesforceCredentials();
+            if (!salesforceCredentials) {
+                throw new Error('Salesforce credentials not available. Please ensure AWS is connected and credentials are configured.');
+            }
+
+            const accessToken = await (this.jiraService as any).authenticateWithSalesforce();
+            // Use the same hardcoded URL as JiraService for now
+            const baseUrl = 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com';
+            
+            // Try querying the describe API to understand the Initiative__c field relationship
+            const describeResponse = await fetch(`${baseUrl}/services/data/v56.0/sobjects/Feedback__c/describe`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!describeResponse.ok) {
+                throw new Error(`Failed to describe Feedback object: ${describeResponse.status}`);
+            }
+
+            const describeData = await describeResponse.json();
+            const initiativeField = describeData.fields.find((field: any) => field.name === 'Initiative__c');
+            
+            if (initiativeField && initiativeField.referenceTo && initiativeField.referenceTo.length > 0) {
+                const referencedObject = initiativeField.referenceTo[0];
+                console.log(`Initiative__c field references: ${referencedObject}`);
+                
+                // Now query the correct object
+                const response = await fetch(`${baseUrl}/services/data/v56.0/query/?q=SELECT+Id%2CName+FROM+${referencedObject}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch initiatives: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data.records.map((record: any) => ({
+                    id: record.Id,
+                    name: record.Name
+                }));
+            } else {
+                // Fallback to CX_Initiative__c based on discovered field relationship
+                const response = await fetch(`${baseUrl}/services/data/v56.0/query/?q=SELECT+Id%2CName+FROM+CX_Initiative__c`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch initiatives: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                return data.records.map((record: any) => ({
+                    id: record.Id,
+                    name: record.Name
+                }));
+            }
+        } catch (error) {
+            console.error('Failed to fetch initiatives:', error);
+            throw new Error(`Failed to fetch initiatives: ${(error as Error).message}`);
+        }
+    }
+
+    /**
+     * Get list of all epics from Salesforce
+     */
+    public async getEpics(): Promise<SalesforceEpic[]> {
+        try {
+            // Check AWS connection status first
+            const awsStatus = await this.awsService.getRealTimeConnectionStatus();
+            if (!awsStatus.connected) {
+                throw new Error('AWS connection is required to load epics. Please connect to AWS first.');
+            }
+
+            // Check if Salesforce credentials are available
+            const salesforceCredentials = this.awsService.getSalesforceCredentials();
+            if (!salesforceCredentials) {
+                throw new Error('Salesforce credentials not available. Please ensure AWS is connected and credentials are configured.');
+            }
+
+            const accessToken = await (this.jiraService as any).authenticateWithSalesforce();
+            // Use the same hardcoded URL as JiraService for now
+            const baseUrl = 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com';
+            
+            // First check if Initiative__c field exists on Epic__c object
+            const describeResponse = await fetch(`${baseUrl}/services/data/v56.0/sobjects/Epic__c/describe`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            let hasInitiativeField = false;
+            if (describeResponse.ok) {
+                const describeData = await describeResponse.json();
+                hasInitiativeField = describeData.fields.some((field: any) => field.name === 'Initiative__c');
+                console.log(`Epic__c has Initiative__c field: ${hasInitiativeField}`);
+            }
+
+            // Build the SOQL query based on whether Initiative field exists
+            let query = `SELECT+Id%2CName%2CTeam_Name__c`;
+            if (hasInitiativeField) {
+                query += `%2CInitiative__c`;
+            }
+            query += `+FROM+Epic__c+ORDER+BY+CreatedDate+DESC`;
+            
+            console.log(`Epic query: ${query}`);
+            const response = await fetch(`${baseUrl}/services/data/v56.0/query/?q=${query}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch epics: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            return data.records.map((record: any) => ({
+                id: record.Id,
+                name: record.Name,
+                teamName: record.Team_Name__c,
+                initiativeId: record.Initiative__c || null // Handle missing Initiative field
+            }));
+        } catch (error) {
+            console.error('Failed to fetch epics:', error);
+            throw new Error(`Failed to fetch epics: ${(error as Error).message}`);
+        }
     }
 
     /**
@@ -63,51 +226,18 @@ export class FeedbackService {
                 throw new Error(validationResult.error || 'Invalid feedback data');
             }
 
-            // Gather system information if requested
-            let systemInfo: SystemInfo | undefined;
-            if (feedbackData.includeSystemInfo) {
-                systemInfo = await this.gatherSystemInfo();
-            }
-
-            // Gather logs if requested
-            let logs: string[] | undefined;
-            if (feedbackData.includeLogs) {
-                logs = await this.gatherRecentLogs();
-            }
-
-            // Gather AWS details if requested
-            let awsDetails: any;
-            if (feedbackData.includeAWSDetails) {
-                awsDetails = await this.gatherAWSDetails();
-            }
-
-            // Prepare submission payload
-            const submissionPayload = {
-                ...feedbackData,
-                systemInfo,
-                logs,
-                awsDetails,
-                timestamp: new Date().toISOString(),
-                submissionId: this.generateSubmissionId()
-            };
-
-            // Sanitize sensitive data if submitting anonymously
-            if (feedbackData.submitAnonymously) {
-                this.sanitizePayload(submissionPayload);
-            }
-
-            // Submit to appropriate endpoint
-            const result = await this.submitToEndpoint(submissionPayload);
+            // Submit to Salesforce
+            const result = await this.submitToSalesforce(feedbackData);
 
             // Cache the submission for user reference
-            await this.cacheSubmission(submissionPayload, result);
+            await this.cacheSubmission(feedbackData, result);
 
             return result;
 
         } catch (error) {
             const errorResult: FeedbackSubmissionResult = {
                 success: false,
-                message: 'Failed to submit feedback',
+                message: 'Failed to submit feature',
                 error: (error as Error).message,
                 timestamp: new Date().toISOString()
             };
@@ -120,11 +250,148 @@ export class FeedbackService {
     }
 
     /**
+     * Submit feedback to Salesforce
+     */
+    private async submitToSalesforce(feedbackData: FeedbackData): Promise<FeedbackSubmissionResult> {
+        try {
+            // Get Salesforce access token
+            const accessToken = await (this.jiraService as any).authenticateWithSalesforce();
+            // Use the same hardcoded URL as JiraService for now
+            const baseUrl = 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com';
+
+            // Prepare Salesforce payload
+            const salesforcePayload: any = {
+                Name: feedbackData.name,
+                Description__c: feedbackData.description,
+                Estimated_Effort_Hours__c: feedbackData.estimatedHours,
+                Type__c: feedbackData.feedbackType,
+                Initiative__c: feedbackData.initiativeId,
+                Epic__c: feedbackData.epicId
+            };
+
+            // Add acceptance criteria if it's a Story type
+            if (feedbackData.feedbackType === 'Story' && feedbackData.acceptanceCriteria) {
+                salesforcePayload.Jira_Acceptance_Criteria__c = feedbackData.acceptanceCriteria;
+            }
+
+            console.log('Submitting to Salesforce:', salesforcePayload);
+
+            const response = await fetch(`${baseUrl}/services/data/v56.0/sobjects/Feedback__c/`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(salesforcePayload)
+            });
+
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                const responseText = await response.text();
+                console.error('Failed to parse Salesforce response:', responseText);
+                throw new Error(`Invalid response from Salesforce: ${response.status} ${response.statusText}`);
+            }
+
+            console.log('Salesforce response:', { status: response.status, result });
+
+            if (response.ok && result.success) {
+                let jiraTicketNumber = result.id; // Fallback to Salesforce ID
+
+                let jiraUrl = undefined;
+                
+                try {
+                    // Retry logic to wait for JIRA ticket creation (as it's asynchronous)
+                    const maxRetries = 3;
+                    const retryDelay = 2000; // 2 seconds
+                    
+                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                        const queryResponse = await fetch(`${baseUrl}/services/data/v56.0/query/?q=SELECT+Id%2CJira_Link__c+FROM+Feedback__c+ORDER+BY+CreatedDate+DESC+LIMIT+1`, {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        if (queryResponse.ok) {
+                            const queryData = await queryResponse.json();
+                            
+                            if (queryData.records && queryData.records.length > 0) {
+                                const latestRecord = queryData.records[0];
+                                
+                                if (latestRecord.Jira_Link__c && latestRecord.Jira_Link__c !== 'TBD') {
+                                    jiraUrl = latestRecord.Jira_Link__c;
+                                    // Extract JIRA ticket number from URL like "https://cisco-learning.atlassian.net/browse/DEVSECOPS-14936"
+                                    const jiraUrlMatch = latestRecord.Jira_Link__c.match(/\/browse\/([A-Z]+-\d+)$/);
+                                    if (jiraUrlMatch) {
+                                        jiraTicketNumber = jiraUrlMatch[1];
+                                        break; // Success! Exit retry loop
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Wait before next attempt (except for the last attempt)
+                        if (attempt < maxRetries) {
+                            await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        }
+                    }
+                } catch (error) {
+                    // Continue with Salesforce ID as fallback
+                }
+
+                return {
+                    success: true,
+                    message: 'Feature submitted to Salesforce successfully!',
+                    ticketId: jiraTicketNumber,
+                    jiraUrl: jiraUrl,
+                    timestamp: new Date().toISOString()
+                };
+            } else {
+                // More detailed error handling
+                console.error('Detailed Salesforce error:', JSON.stringify(result, null, 2));
+                console.error('Detailed Salesforce error (raw):', result);
+                
+                let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                if (Array.isArray(result) && result.length > 0) {
+                    // Salesforce often returns an array of error objects
+                    const errors = result.map((err: any) => {
+                        if (err.errorCode && err.message) {
+                            return `${err.errorCode}: ${err.message}`;
+                        }
+                        return JSON.stringify(err);
+                    }).join('; ');
+                    errorMsg = errors; // Use the detailed error message directly
+                    console.error('Formatted error message:', errorMsg);
+                } else if (result && result.errors && result.errors.length > 0) {
+                    const errors = result.errors.map((err: any) => `${err.statusCode}: ${err.message}`).join(', ');
+                    errorMsg = errors;
+                } else if (result && result.message) {
+                    errorMsg = result.message;
+                }
+                
+                throw new Error(errorMsg);
+            }
+
+        } catch (error) {
+            console.error('Salesforce submission failed:', error);
+            return {
+                success: false,
+                message: `Failed to submit to Salesforce: ${(error as Error).message}`,
+                error: (error as Error).message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
+
+    /**
      * Save feedback as draft
      */
     public async saveDraft(feedbackData: Partial<FeedbackData>): Promise<void> {
         try {
-            const drafts = this.context.globalState.get<any[]>('vibeAssistant.feedbackDrafts', []);
+            const drafts = this.context.globalState.get<any[]>('specDrivenDevelopment.feedbackDrafts', []);
             const newDraft = {
                 ...feedbackData,
                 id: this.generateSubmissionId(),
@@ -132,7 +399,7 @@ export class FeedbackService {
             };
 
             const updatedDrafts = [newDraft, ...drafts.slice(0, 4)]; // Keep last 5 drafts
-            await this.context.globalState.update('vibeAssistant.feedbackDrafts', updatedDrafts);
+            await this.context.globalState.update('specDrivenDevelopment.feedbackDrafts', updatedDrafts);
 
         } catch (error) {
             console.error('Failed to save feedback draft:', error);
@@ -143,7 +410,7 @@ export class FeedbackService {
      * Get saved drafts
      */
     public async getDrafts(): Promise<any[]> {
-        return this.context.globalState.get<any[]>('vibeAssistant.feedbackDrafts', []);
+        return this.context.globalState.get<any[]>('specDrivenDevelopment.feedbackDrafts', []);
     }
 
     /**
@@ -151,15 +418,22 @@ export class FeedbackService {
      */
     public async deleteDraft(draftId: string): Promise<void> {
         try {
-            const drafts = this.context.globalState.get<any[]>('vibeAssistant.feedbackDrafts', []);
+            const drafts = this.context.globalState.get<any[]>('specDrivenDevelopment.feedbackDrafts', []);
             const updatedDrafts = drafts.filter(draft => draft.id !== draftId);
-            await this.context.globalState.update('vibeAssistant.feedbackDrafts', updatedDrafts);
+            await this.context.globalState.update('specDrivenDevelopment.feedbackDrafts', updatedDrafts);
         } catch (error) {
             console.error('Failed to delete feedback draft:', error);
         }
     }
 
     private validateFeedbackData(data: FeedbackData): {isValid: boolean; error?: string} {
+        if (!data.name || data.name.trim().length < 3) {
+            return {
+                isValid: false,
+                error: 'Component name must be at least 3 characters long'
+            };
+        }
+
         if (!data.description || data.description.trim().length < 10) {
             return {
                 isValid: false,
@@ -167,21 +441,42 @@ export class FeedbackService {
             };
         }
 
-        // Only require email if NOT submitting anonymously
-        if (!data.submitAnonymously) {
-            if (!data.contactEmail || data.contactEmail.trim() === '' || data.contactEmail === 'your.email@company.com') {
-                return {
-                    isValid: false,
-                    error: 'Valid contact email is required when not submitting anonymously'
-                };
-            }
-            
-            if (!this.isValidEmail(data.contactEmail)) {
-                return {
-                    isValid: false,
-                    error: 'Please enter a valid email address'
-                };
-            }
+        if (!data.estimatedHours || data.estimatedHours <= 0) {
+            return {
+                isValid: false,
+                error: 'Estimated hours must be greater than 0'
+            };
+        }
+
+        if (!data.feedbackType || !['Story', 'Bug', 'Defect'].includes(data.feedbackType)) {
+            return {
+                isValid: false,
+                error: 'Please select a valid feedback type'
+            };
+        }
+
+        if (!data.initiativeId || data.initiativeId.trim() === '') {
+            return {
+                isValid: false,
+                error: 'Please select an initiative'
+            };
+        }
+
+        if (!data.epicId || data.epicId.trim() === '') {
+            return {
+                isValid: false,
+                error: 'Please select an epic'
+            };
+        }
+
+
+
+        // If Story type, acceptance criteria is required
+        if (data.feedbackType === 'Story' && (!data.acceptanceCriteria || data.acceptanceCriteria.trim().length < 10)) {
+            return {
+                isValid: false,
+                error: 'Acceptance criteria is required for Story type and must be at least 10 characters long'
+            };
         }
 
         return { isValid: true };
@@ -192,380 +487,10 @@ export class FeedbackService {
         return emailRegex.test(email);
     }
 
-    private async gatherSystemInfo(): Promise<SystemInfo> {
-        const extension = vscode.extensions.getExtension('Gen-Ai-publisher.vibe-sync-code');
-        const workspaceInfo = vscode.workspace.workspaceFolders?.[0];
-        
-        // Get active languages from open editors (simplified approach)
-        const activeLanguages = vscode.window.visibleTextEditors
-            .map(editor => editor.document.languageId)
-            .filter((lang, index, array) => array.indexOf(lang) === index); // Remove duplicates
 
-        return {
-            extensionVersion: extension?.packageJSON.version || 'unknown',
-            vscodeVersion: vscode.version,
-            operatingSystem: `${os.type()} ${os.release()}`,
-            nodeVersion: process.version,
-            platform: os.platform(),
-            architecture: os.arch(),
-            workspace: workspaceInfo ? vscode.workspace.asRelativePath(workspaceInfo.uri) : undefined,
-            activeLanguages: activeLanguages.length > 0 ? activeLanguages : ['unknown']
-        };
-    }
-
-    private async gatherRecentLogs(): Promise<string[]> {
-        try {
-            // Get recent extension logs from output channel
-            const outputChannel = vscode.window.createOutputChannel('Vibe Assistant');
-            
-            // For now, return simulated recent activities
-            return [
-                `[${new Date().toISOString()}] Extension activated`,
-                `[${new Date().toISOString()}] AWS connection attempted`,
-                `[${new Date().toISOString()}] Estimation parsing completed`,
-                `[${new Date().toISOString()}] User interaction logged`
-            ];
-        } catch (error) {
-            return [`Failed to gather logs: ${(error as Error).message}`];
-        }
-    }
-
-    private async gatherAWSDetails(): Promise<any> {
-        try {
-            const awsStatus = this.context.globalState.get('vibeAssistant.awsStatus');
-            return {
-                connectionStatus: awsStatus || 'not connected',
-                lastConnectionAttempt: this.context.globalState.get('vibeAssistant.lastAWSConnectionAttempt'),
-                configuredProfile: vscode.workspace.getConfiguration('vibeAssistant').get('awsProfile'),
-                configuredRegion: vscode.workspace.getConfiguration('vibeAssistant').get('awsRegion')
-            };
-        } catch (error) {
-            return { error: `Failed to gather AWS details: ${(error as Error).message}` };
-        }
-    }
-
-    private sanitizePayload(payload: any): void {
-        // Remove or mask sensitive information
-        if (payload.contactEmail) {
-            payload.contactEmail = this.maskEmail(payload.contactEmail);
-        }
-
-        if (payload.systemInfo) {
-            payload.systemInfo.workspace = payload.systemInfo.workspace ? '[WORKSPACE]' : undefined;
-        }
-
-        if (payload.awsDetails) {
-            if (payload.awsDetails.configuredProfile) {
-                payload.awsDetails.configuredProfile = '[PROFILE]';
-            }
-        }
-
-        // Remove any potential sensitive data from logs
-        if (payload.logs) {
-            payload.logs = payload.logs.map((log: string) => 
-                log.replace(/[a-zA-Z0-9+/=]{20,}/g, '[REDACTED]') // Remove potential keys/tokens
-            );
-        }
-    }
-
-    private maskEmail(email: string): string {
-        const parts = email.split('@');
-        if (parts.length !== 2) return '[EMAIL]';
-        
-        const username = parts[0];
-        const domain = parts[1];
-        
-        const maskedUsername = username.length > 2 
-            ? username.substring(0, 2) + '*'.repeat(username.length - 2)
-            : '**';
-            
-        return `${maskedUsername}@${domain}`;
-    }
-
-    private async submitToEndpoint(payload: any): Promise<FeedbackSubmissionResult> {
-        try {
-            // Always save locally first
-            const localResult: FeedbackSubmissionResult = {
-                success: true,
-                message: 'Feedback saved locally',
-                ticketId: `LOCAL-${Date.now()}`,
-                timestamp: new Date().toISOString()
-            };
-
-            // Ask user how they want to submit the feedback
-            const choice = await vscode.window.showInformationMessage(
-                'Feedback saved! How would you like to submit it?',
-                'Create GitHub Issue',
-                'Keep Local Only',
-                'Email Developer'
-            );
-
-            if (choice === 'Create GitHub Issue') {
-                const githubResult = await this.createGitHubIssue(payload);
-                if (githubResult.success) {
-                    vscode.window.showInformationMessage(
-                        `✅ GitHub issue created successfully!`,
-                        'View Issue'
-                    ).then(action => {
-                        if (action === 'View Issue' && githubResult.issueUrl) {
-                            vscode.env.openExternal(vscode.Uri.parse(githubResult.issueUrl));
-                        }
-                    });
-                    return {
-                        ...localResult,
-                        message: 'Feedback saved locally and GitHub issue created',
-                        ticketId: `GH-${githubResult.issueUrl?.split('/').pop() || 'unknown'}`
-                    };
-                } else {
-                    vscode.window.showErrorMessage(`❌ Failed to create GitHub issue: ${githubResult.error}`);
-                    return {
-                        ...localResult,
-                        message: 'Feedback saved locally but GitHub issue creation failed',
-                        error: githubResult.error
-                    };
-                }
-            } else if (choice === 'Email Developer') {
-                await this.openEmailClient(payload);
-                return {
-                    ...localResult,
-                    message: 'Feedback saved locally and email client opened',
-                    ticketId: localResult.ticketId
-                };
-            }
-
-            return localResult;
-
-            // Example of actual HTTP submission (commented out):
-            /*
-            const response = await fetch(this.feedbackEndpoints.github, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'token YOUR_GITHUB_TOKEN',
-                    'User-Agent': 'Vibe-Code-Assistant-Extension'
-                },
-                body: JSON.stringify({
-                    title: `[${payload.issueType.toUpperCase()}] ${payload.description.substring(0, 50)}...`,
-                    body: this.formatGitHubIssueBody(payload),
-                    labels: [payload.issueType, payload.priority, payload.component]
-                })
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            const result = await response.json();
-            return {
-                success: true,
-                message: 'Feedback submitted to GitHub Issues',
-                ticketId: `#${result.number}`,
-                timestamp: new Date().toISOString()
-            };
-            */
-
-        } catch (error) {
-            throw new Error(`Failed to submit feedback: ${(error as Error).message}`);
-        }
-    }
-
-    private formatGitHubIssueBody(payload: any): string {
-        let body = `## Issue Description\n${payload.description}\n\n`;
-        
-        body += `## Details\n`;
-        body += `- **Type**: ${payload.issueType}\n`;
-        body += `- **Priority**: ${payload.priority}\n`;
-        body += `- **Component**: ${payload.component}\n`;
-        body += `- **Contact**: ${payload.contactEmail || 'Anonymous'}\n\n`;
-
-        if (payload.systemInfo) {
-            body += `## System Information\n`;
-            body += `- **Extension Version**: ${payload.systemInfo.extensionVersion}\n`;
-            body += `- **VS Code Version**: ${payload.systemInfo.vscodeVersion}\n`;
-            body += `- **OS**: ${payload.systemInfo.operatingSystem}\n`;
-            body += `- **Platform**: ${payload.systemInfo.platform}\n`;
-            body += `- **Architecture**: ${payload.systemInfo.architecture}\n\n`;
-        }
-
-        if (payload.awsDetails) {
-            body += `## AWS Configuration\n`;
-            body += `- **Connection Status**: ${payload.awsDetails.connectionStatus}\n`;
-            body += `- **Profile**: ${payload.awsDetails.configuredProfile}\n`;
-            body += `- **Region**: ${payload.awsDetails.configuredRegion}\n\n`;
-        }
-
-        if (payload.logs && payload.logs.length > 0) {
-            body += `## Recent Logs\n\`\`\`\n${payload.logs.join('\n')}\n\`\`\`\n\n`;
-        }
-
-        body += `---\n*Submitted via Spec Driven Development Extension on ${payload.timestamp}*`;
-
-        return body;
-    }
 
     private generateSubmissionId(): string {
         return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    }
-
-    private async createGitHubIssue(payload: any): Promise<{ success: boolean; issueUrl?: string; error?: string }> {
-        try {
-            const title = `[${payload.issueType.toUpperCase()}] ${payload.component} - ${payload.priority}`;
-            const body = this.formatGitHubIssueBody(payload);
-            
-            // Get GitHub token from VS Code settings
-            const githubToken = config.getGitHubToken();
-            
-            if (!githubToken) {
-                return {
-                    success: false,
-                    error: 'GitHub token not configured. Please set vibeAssistant.githubToken in VS Code settings.'
-                };
-            }
-
-            // Try creating issue with labels first, fallback to no labels if permission denied
-            let issueData = {
-                title: title,
-                body: body,
-                labels: [
-                    payload.issueType.toLowerCase().replace(' ', '-'),
-                    `priority-${payload.priority.toLowerCase()}`,
-                    `component-${payload.component.toLowerCase().replace(' ', '-')}`
-                ]
-            };
-
-            console.log('Creating GitHub issue with data:', issueData);
-            console.log('API Endpoint:', this.feedbackEndpoints.github);
-            
-            const response = await fetch(this.feedbackEndpoints.github, {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/vnd.github.v3+json',
-                    'Authorization': `token ${githubToken}`,
-                    'Content-Type': 'application/json',
-                    'User-Agent': 'Vibe-Code-Assistant-Extension'
-                },
-                body: JSON.stringify(issueData)
-            });
-
-            console.log('GitHub API Response:', response.status, response.statusText);
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                console.error('GitHub API Error Details:', errorData);
-                
-                // If 403 and it's about labels, try again without labels
-                if (response.status === 403 && errorData.message?.includes('labels')) {
-                    console.log('Retrying without labels due to permission restrictions...');
-                    
-                    const issueDataNoLabels = {
-                        title: title,
-                        body: body + `\n\n---\n**Labels**: ${issueData.labels.join(', ')}`
-                    };
-
-                    const retryResponse = await fetch(this.feedbackEndpoints.github, {
-                        method: 'POST',
-                        headers: {
-                            'Accept': 'application/vnd.github.v3+json',
-                            'Authorization': `token ${githubToken}`,
-                            'Content-Type': 'application/json',
-                            'User-Agent': 'Vibe-Code-Assistant-Extension'
-                        },
-                        body: JSON.stringify(issueDataNoLabels)
-                    });
-
-                    if (retryResponse.ok) {
-                        const result = await retryResponse.json();
-                        return {
-                            success: true,
-                            issueUrl: result.html_url
-                        };
-                    }
-                }
-                
-                // Check if it's a repository access issue
-                if (response.status === 404) {
-                    return {
-                        success: false,
-                        error: `Cannot create issues - insufficient permissions.\n\nYour token needs WRITE access to create issues.\n\nPlease:\n1. Go to ${config.getDocumentationUrls().tokenSettings}\n2. Edit your token\n3. Select 'repo' scope (full repository access)\n4. Update the token in VS Code\n\nCurrent token has read-only access.`
-                    };
-                }
-
-                if (response.status === 403) {
-                    return {
-                        success: false,
-                        error: `Permission denied (403).\n\nPossible issues:\n1. You may not have write access to this repository\n2. Your token may need additional permissions\n3. Repository may have restrictions\n\nError: ${errorData.message || response.statusText}`
-                    };
-                }
-                
-                return {
-                    success: false,
-                    error: `GitHub API Error: ${response.status} - ${errorData.message || response.statusText}`
-                };
-            }
-
-            const result = await response.json();
-            return {
-                success: true,
-                issueUrl: result.html_url
-            };
-            
-        } catch (error) {
-            return {
-                success: false,
-                error: `Failed to create GitHub issue: ${(error as Error).message}`
-            };
-        }
-    }
-
-    private async openEmailClient(payload: any): Promise<void> {
-        try {
-            const subject = `[Vibe Assistant] ${payload.issueType}: ${payload.component}`;
-            const body = this.formatEmailBody(payload);
-            
-            // Replace with your actual email
-            const emailAddress = 'feedback@yourextension.com';
-            
-            const mailtoUrl = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            
-            await vscode.env.openExternal(vscode.Uri.parse(mailtoUrl));
-            
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open email client: ${(error as Error).message}`);
-        }
-    }
-
-    private formatEmailBody(payload: any): string {
-        let body = `Issue Type: ${payload.issueType}\n`;
-        body += `Priority: ${payload.priority}\n`;
-        body += `Component: ${payload.component}\n\n`;
-        body += `Description:\n${payload.description}\n\n`;
-        
-        if (payload.contactEmail && !payload.submitAnonymously) {
-            body += `Contact: ${payload.contactEmail}\n\n`;
-        }
-        
-        if (payload.systemInfo) {
-            body += `--- System Information ---\n`;
-            body += `Extension Version: ${payload.systemInfo.extensionVersion}\n`;
-            body += `VS Code Version: ${payload.systemInfo.vscodeVersion}\n`;
-            body += `OS: ${payload.systemInfo.operatingSystem}\n`;
-            body += `Platform: ${payload.systemInfo.platform}\n\n`;
-        }
-        
-        if (payload.awsDetails) {
-            body += `--- AWS Details ---\n`;
-            body += `Connection Status: ${payload.awsDetails.connectionStatus}\n`;
-            body += `Profile: ${payload.awsDetails.configuredProfile}\n`;
-            body += `Region: ${payload.awsDetails.configuredRegion}\n\n`;
-        }
-        
-        if (payload.logs && payload.logs.length > 0) {
-            body += `--- Recent Logs ---\n${payload.logs.join('\n')}\n\n`;
-        }
-        
-        body += `---\nSubmitted via Spec Driven Development Extension on ${payload.timestamp}`;
-        
-        return body;
     }
 
     private async cacheSubmission(payload: any, result: FeedbackSubmissionResult): Promise<void> {
@@ -573,23 +498,23 @@ export class FeedbackService {
             const submission = {
                 id: this.generateSubmissionId(),
                 payload: {
-                    issueType: payload.issueType,
-                    priority: payload.priority,
-                    component: payload.component,
+                    name: payload.name,
+                    feedbackType: payload.feedbackType,
                     description: payload.description?.substring(0, 100) + '...',
-                    contactEmail: payload.submitAnonymously ? '[Anonymous]' : payload.contactEmail
+                    estimatedHours: payload.estimatedHours,
+                    contactEmail: payload.contactEmail
                 },
                 result: result,
                 timestamp: new Date().toISOString()
             };
 
             // Store most recent submission
-            await this.context.globalState.update('vibeAssistant.lastFeedbackSubmission', submission);
+            await this.context.globalState.update('specDrivenDevelopment.lastFeedbackSubmission', submission);
 
             // Add to submission history
-            const history = this.context.globalState.get<any[]>('vibeAssistant.feedbackHistory', []);
+            const history = this.context.globalState.get<any[]>('specDrivenDevelopment.feedbackHistory', []);
             const updatedHistory = [submission, ...history.slice(0, 9)]; // Keep last 10 submissions
-            await this.context.globalState.update('vibeAssistant.feedbackHistory', updatedHistory);
+            await this.context.globalState.update('specDrivenDevelopment.feedbackHistory', updatedHistory);
 
         } catch (error) {
             console.error('Failed to cache feedback submission:', error);
@@ -597,35 +522,30 @@ export class FeedbackService {
     }
 
     public async getSubmissionHistory(): Promise<any[]> {
-        return this.context.globalState.get<any[]>('vibeAssistant.feedbackHistory', []);
+        return this.context.globalState.get<any[]>('specDrivenDevelopment.feedbackHistory', []);
     }
 
     public async getLastSubmission(): Promise<any> {
-        return this.context.globalState.get('vibeAssistant.lastFeedbackSubmission');
+        return this.context.globalState.get('specDrivenDevelopment.lastFeedbackSubmission');
     }
 
     public async clearSubmissionHistory(): Promise<void> {
-        await this.context.globalState.update('vibeAssistant.lastFeedbackSubmission', undefined);
-        await this.context.globalState.update('vibeAssistant.feedbackHistory', []);
+        await this.context.globalState.update('specDrivenDevelopment.lastFeedbackSubmission', undefined);
+        await this.context.globalState.update('specDrivenDevelopment.feedbackHistory', []);
     }
 
     /**
-     * Quick feedback for common issues
+     * Quick feedback for common issues (simplified for Salesforce integration)
      */
     public async submitQuickFeedback(type: 'connection-issue' | 'estimation-wrong' | 'ui-bug', description: string): Promise<FeedbackSubmissionResult> {
-        const quickFeedbackData: FeedbackData = {
-            issueType: 'bug',
-            priority: type === 'connection-issue' ? 'high' : 'medium',
-            component: type === 'connection-issue' ? 'aws-integration' : 
-                      type === 'estimation-wrong' ? 'estimation-parser' : 'ui',
-            description: description,
-            includeSystemInfo: true,
-            includeLogs: true,
-            includeAWSDetails: type === 'connection-issue',
-            submitAnonymously: true
+        // Note: Quick feedback is simplified as it requires initiative and epic selection from UI
+        // This method is deprecated in favor of the full feedback form
+        return {
+            success: false,
+            message: 'Quick feedback is not supported with Salesforce integration. Please use the full feedback form.',
+            timestamp: new Date().toISOString(),
+            error: 'Feature requires initiative and epic selection'
         };
-
-        return await this.submitFeedback(quickFeedbackData);
     }
 
     public dispose(): void {

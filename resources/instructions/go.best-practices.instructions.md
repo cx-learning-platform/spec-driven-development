@@ -1,9 +1,9 @@
 ---
 description: Comprehensive Go best practices covering naming conventions, error handling, concurrency patterns, performance optimization, and idiomatic Go code style with practical examples.
-applyTo:
-  - "**/*.go"
-  - "**/go.mod"
-  - "**/go.sum"
+mode: reference
+model: 
+tools: ["copilot-chat"]
+inputVariables: ["go-version", "code-review-focus", "team-guidelines"]
 ---
 
 # Go Best Practices & Style Guide
@@ -1368,6 +1368,212 @@ server := NewServer(
 )
 ```
 
+## Documentation Standards
+
+### README.md Requirements
+Every Go project **MUST** include a comprehensive README.md that is updated with every check-in:
+
+```markdown
+# Project Name
+
+Brief description of what this service/package does.
+
+## Overview
+- **Purpose**: What problem does this solve?
+- **Scope**: What does this service handle?
+- **Dependencies**: Key external dependencies
+
+## Getting Started
+
+### Prerequisites
+- Go 1.21+
+- Required tools (Docker, databases, etc.)
+- Environment setup requirements
+
+### Installation
+```bash
+go mod download
+make install  # or equivalent setup
+```
+
+### Configuration
+- Environment variables required
+- Configuration file examples
+- Default values and overrides
+
+### Running Locally
+```bash
+make run
+# or
+go run cmd/server/main.go
+```
+
+## API Documentation
+- Available endpoints (link to OpenAPI/Swagger)
+- Authentication requirements
+- Request/Response examples
+
+## Development
+
+### Project Structure
+```
+cmd/          # Application entry points
+internal/     # Private application code
+pkg/          # Library code for external use
+api/          # API definitions (OpenAPI, protobuf)
+docs/         # Additional documentation
+```
+
+### Building
+```bash
+make build
+# or
+go build -o bin/server cmd/server/main.go
+```
+
+### Testing
+```bash
+make test
+# or
+go test -v ./...
+```
+
+### Code Quality
+```bash
+make lint      # golangci-lint
+make fmt       # gofmt + goimports
+make security  # gosec security scan
+```
+
+## Deployment
+- Docker build instructions
+- Kubernetes manifests location
+- Environment-specific configurations
+
+## Monitoring & Observability
+- Metrics endpoints (/metrics)
+- Health check endpoints (/health, /ready)
+- Logging configuration
+- Tracing setup (if applicable)
+
+## Contributing
+- Code review process
+- Testing requirements
+- Documentation updates required
+
+## License
+[License type and link]
+```
+
+### Documentation Update Checklist
+**MANDATORY**: Update documentation with every code change:
+
+- [ ] **README.md** updated for any new features, APIs, or configuration changes
+- [ ] **API documentation** updated (OpenAPI specs, endpoint documentation)
+- [ ] **Configuration docs** updated for new environment variables or settings
+- [ ] **Code comments** added/updated for public APIs and complex logic
+- [ ] **CHANGELOG.md** updated with breaking changes and new features
+- [ ] **Deployment docs** updated if infrastructure or deployment changes
+- [ ] **Monitoring docs** updated for new metrics, alerts, or dashboards
+
+### API Documentation Standards
+```go
+// Good: Comprehensive API documentation
+// Package userapi provides REST API endpoints for user management.
+//
+// Base URL: /api/v1
+// Authentication: Bearer token required
+//
+// Error Responses:
+//   400 Bad Request - Invalid input
+//   401 Unauthorized - Missing or invalid token
+//   404 Not Found - Resource not found
+//   500 Internal Server Error - Server error
+package userapi
+
+// CreateUserRequest represents the request payload for creating a user.
+//
+// Example:
+//   {
+//     "email": "user@example.com",
+//     "name": "John Doe",
+//     "role": "user"
+//   }
+type CreateUserRequest struct {
+    // Email is the user's email address (required, must be valid email)
+    Email string `json:"email" validate:"required,email"`
+    
+    // Name is the user's full name (required, 1-100 characters)
+    Name string `json:"name" validate:"required,min=1,max=100"`
+    
+    // Role is the user's role (optional, defaults to "user")
+    Role string `json:"role,omitempty" validate:"omitempty,oneof=admin user"`
+}
+
+// CreateUser creates a new user in the system.
+//
+// POST /api/v1/users
+//
+// Request Body: CreateUserRequest
+// Response: User (201 Created) or Error (400/500)
+//
+// Example:
+//   curl -X POST /api/v1/users \
+//     -H "Authorization: Bearer token" \
+//     -H "Content-Type: application/json" \
+//     -d '{"email":"user@example.com","name":"John Doe"}'
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    // Implementation
+}
+```
+
+### Code Documentation Standards
+```go
+// Good: Package-level documentation
+// Package calculator provides mathematical calculation utilities
+// with support for basic arithmetic operations and advanced functions.
+//
+// This package is designed for high-performance calculations and
+// includes proper error handling for edge cases like division by zero.
+//
+// Example usage:
+//
+//   calc := calculator.New()
+//   result, err := calc.Divide(10, 2)
+//   if err != nil {
+//       log.Fatal(err)
+//   }
+//   fmt.Printf("Result: %f", result)
+package calculator
+
+// Calculator provides mathematical operations with error handling.
+type Calculator struct {
+    precision int
+}
+
+// New creates a new Calculator with default precision.
+func New() *Calculator {
+    return &Calculator{precision: 2}
+}
+
+// Divide performs division of two numbers.
+// Returns an error if the divisor is zero.
+//
+// Parameters:
+//   dividend - the number to be divided
+//   divisor - the number to divide by (cannot be zero)
+//
+// Returns:
+//   result - the quotient of dividend/divisor
+//   error - ErrDivisionByZero if divisor is zero
+func (c *Calculator) Divide(dividend, divisor float64) (float64, error) {
+    if divisor == 0 {
+        return 0, ErrDivisionByZero
+    }
+    return dividend / divisor, nil
+}
+```
+
 ## Code Quality and Formatting
 
 ### Code Style Guidelines
@@ -1423,6 +1629,30 @@ type ProcessOptions struct {
     
     // Async indicates whether processing should be asynchronous.
     Async bool
+}
+```
+
+### Documentation Maintenance
+```go
+// Pre-commit checklist for documentation:
+// 1. README.md reflects current functionality
+// 2. API docs match actual endpoints
+// 3. Configuration examples are current
+// 4. Code comments explain "why" not just "what"
+// 5. Public functions have complete godoc comments
+// 6. Examples in docs actually work
+
+// Good: Maintainable documentation
+// BadgeService manages user achievement badges.
+// 
+// This service handles the complex logic of badge eligibility,
+// award timing, and notification delivery. It integrates with
+// the achievement tracking system and user notification preferences.
+//
+// Thread Safety: This service is safe for concurrent use.
+// All methods can be called from multiple goroutines.
+type BadgeService struct {
+    // Implementation details...
 }
 ```
 

@@ -100,7 +100,7 @@ export class InstructionsProvider implements vscode.TreeDataProvider<Instruction
             
             item.contextValue = isContextual ? 'contextualInstruction' : 'instruction';
             item.command = {
-                command: 'vibeAssistant.openInstruction',
+                command: 'specDrivenDevelopment.openInstruction',
                 title: 'Open Instruction',
                 arguments: [instruction]
             };
@@ -199,7 +199,7 @@ export class InstructionItem extends vscode.TreeItem {
 }
 
 // Register command to handle instruction clicks
-vscode.commands.registerCommand('vibeAssistant.openInstruction', async (instruction: Instruction) => {
+vscode.commands.registerCommand('specDrivenDevelopment.openInstruction', async (instruction: Instruction) => {
     try {
         const doc = await vscode.workspace.openTextDocument({
             content: `# ${instruction.name}\n\n${instruction.content}`,

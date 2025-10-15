@@ -32,15 +32,24 @@ export class PromptManager {
     private extensionPath: string;
 
     constructor(extensionPath: string) {
-        this.extensionPath = extensionPath;
+        // Handle both development and compiled scenarios
+        // In development: extensionPath points to extension root
+        // In compiled: __dirname is in 'out', so we need to go up one level
+        this.extensionPath = fs.existsSync(path.join(extensionPath, 'resources')) 
+            ? extensionPath 
+            : path.dirname(__dirname);
         this.loadPrompts();
     }
 
     private loadPrompts() {
         const promptDir = path.join(this.extensionPath, 'resources', 'prompts');
         
+        console.log(`🔍 Debug: Looking for prompts in: ${promptDir}`);
+        console.log(`🔍 Debug: Extension path: ${this.extensionPath}`);
+        console.log(`🔍 Debug: Prompts directory exists: ${fs.existsSync(promptDir)}`);
+        
         if (!fs.existsSync(promptDir)) {
-            vscode.window.showErrorMessage('Prompts directory not found');
+            vscode.window.showErrorMessage(`Prompts directory not found: ${promptDir}`);
             return;
         }
 
@@ -49,7 +58,8 @@ export class PromptManager {
 
         const files = fs.readdirSync(promptDir).filter((file: string) => file.endsWith('.md'));
         
-        console.log(`📁 Found ${files.length} prompt files:`, files);
+        console.log(`� Debug: Found ${files.length} prompt files:`, files);
+        console.log(`🔍 Debug: Successfully loaded prompts:`, Array.from(this.prompts.keys()));
         
         files.forEach((file: string) => {
             try {
@@ -68,7 +78,8 @@ export class PromptManager {
             }
         });
 
-        console.log(`📋 Successfully loaded ${this.prompts.size} prompt files`);
+        console.log(`� Debug: Successfully loaded ${this.prompts.size} prompt files`);
+        console.log(`🔍 Debug: Prompt IDs:`, Array.from(this.prompts.keys()));
         
         // Log all loaded prompts for debugging
         this.prompts.forEach((prompt, id) => {

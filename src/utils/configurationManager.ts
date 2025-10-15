@@ -98,7 +98,7 @@ export class ConfigurationManager {
 
         // Try VS Code setting
         if (vscodeSettingPath) {
-            const vscodeConfig = vscode.workspace.getConfiguration('vibeAssistant');
+            const vscodeConfig = vscode.workspace.getConfiguration('specDrivenDevelopment');
             const vscodeValue = vscodeConfig.get(vscodeSettingPath) as T;
             if (vscodeValue !== undefined) {
                 return vscodeValue;
@@ -139,13 +139,13 @@ export class ConfigurationManager {
             github: {
                 baseUrl: this.get('GITHUB_API_BASE_URL', undefined, 'https://api.github.com'),
                 repoOwner: this.get('GITHUB_REPO_OWNER', undefined, 'Relanto-LKM-POC'),
-                repoName: this.get('GITHUB_REPO_NAME', undefined, 'gen-ai-vibe-code-plugin'),
+                repoName: this.get('GITHUB_REPO_NAME', undefined, 'spec-driven-development'),
                 issuesEndpoint: this.get('GITHUB_ISSUES_ENDPOINT', undefined, 
-                    'https://api.github.com/repos/Relanto-LKM-POC/gen-ai-vibe-code-plugin/issues')
+                    'https://api.github.com/repos/Relanto-LKM-POC/spec-driven-development/issues')
             },
             feedback: {
                 github: this.get('FEEDBACK_GITHUB_ENDPOINT', undefined,
-                    'https://api.github.com/repos/Relanto-LKM-POC/gen-ai-vibe-code-plugin/issues'),
+                    'https://api.github.com/repos/Relanto-LKM-POC/spec-driven-development/issues'),
                 internal: this.get('FEEDBACK_INTERNAL_ENDPOINT', undefined,
                     'https://api.internal-tracker.example.com/feedback'),
                 analytics: this.get('FEEDBACK_ANALYTICS_ENDPOINT', undefined,
@@ -166,7 +166,7 @@ export class ConfigurationManager {
     public getDocumentationUrls() {
         return {
             readme: this.get('GITHUB_REPO_README_URL', undefined,
-                'https://github.com/vibe-tech/vibe-code-assistant#readme'),
+                'https://github.com/Relanto-LKM-POC/spec-driven-development#readme'),
             tokenSettings: this.get('GITHUB_TOKEN_SETTINGS_URL', undefined,
                 'https://github.com/settings/tokens')
         };
@@ -203,7 +203,7 @@ export class ConfigurationManager {
      * Get GitHub token (always from VS Code secure storage)
      */
     public getGitHubToken(): string {
-        const config = vscode.workspace.getConfiguration('vibeAssistant');
+        const config = vscode.workspace.getConfiguration('specDrivenDevelopment');
         return config.get('githubToken', '');
     }
 
@@ -211,7 +211,7 @@ export class ConfigurationManager {
      * Set GitHub token (always to VS Code secure storage)
      */
     public async setGitHubToken(token: string): Promise<void> {
-        const config = vscode.workspace.getConfiguration('vibeAssistant');
+        const config = vscode.workspace.getConfiguration('specDrivenDevelopment');
         await config.update('githubToken', token, vscode.ConfigurationTarget.Global);
     }
 

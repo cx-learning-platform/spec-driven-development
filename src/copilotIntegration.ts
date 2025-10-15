@@ -5,10 +5,11 @@ import { Prompt, CodeContext } from './promptManager';
 import { ResourceFile } from './resourceManager';
 
 export class CopilotIntegration {
-    private static readonly GITHUB_INSTRUCTIONS_DIR = '.github/instructions';
-    private static readonly GITHUB_PROMPTS_DIR = '.github/prompts';
-    private static readonly WORKSPACE_VSCODE_DIR = '.vscode';
-    private static readonly WORKSPACE_HOWTO_DIR = 'how-to-guides';
+    private static readonly SPEC_DRIVEN_FILES_DIR = '.spec-driven-files';
+    private static readonly GITHUB_INSTRUCTIONS_DIR = '.spec-driven-files/.github/instructions';
+    private static readonly GITHUB_PROMPTS_DIR = '.spec-driven-files/.github/prompts';
+    private static readonly WORKSPACE_VSCODE_DIR = '.spec-driven-files/.vscode';
+    private static readonly WORKSPACE_HOWTO_DIR = '.spec-driven-files/how-to-guides';
     private outputChannel: vscode.OutputChannel;
     private lastNotificationTime: number = 0;
     private isManualCommand: boolean = false;
@@ -30,7 +31,7 @@ export class CopilotIntegration {
             })));
             
             // Show notification if enabled
-            const config = vscode.workspace.getConfiguration('vibeAssistant');
+            const config = vscode.workspace.getConfiguration('specDrivenDevelopment');
             const showNotifications = config.get('showNotifications', true);
             
             // Only show notifications for manual commands, not automatic file switching
@@ -94,7 +95,7 @@ export class CopilotIntegration {
             })));
             
             // Show notification
-            const config = vscode.workspace.getConfiguration('vibeAssistant');
+            const config = vscode.workspace.getConfiguration('specDrivenDevelopment');
             const showNotifications = config.get('showNotifications', true);
             
             if (showNotifications && this.shouldShowNotification()) {
@@ -154,7 +155,7 @@ export class CopilotIntegration {
         await this.copyAdditionalResourcesToWorkspace(workspaceRoot);
         
         // Check user preference for .gitignore handling
-        const config = vscode.workspace.getConfiguration('vibeAssistant');
+        const config = vscode.workspace.getConfiguration('specDrivenDevelopment');
         const autoIgnore = config.get('autoIgnoreAIFiles', true);
         
         if (autoIgnore) {
@@ -165,11 +166,11 @@ export class CopilotIntegration {
             console.log('📝 Skipping .gitignore update (user preference: commit AI files)');
         }
         
-        console.log(`✅ Created workspace-specific Copilot resources in .github/`);
-        console.log(`📋 Instructions: Complete directory copied`);
-        console.log(`🎯 Prompts: Complete directory copied`);
-        console.log(`⚙️ VS Code Settings: Complete directory copied`);
-        console.log(`📖 How-to Guides: Complete directory copied`);
+        console.log(`✅ Created workspace-specific Copilot resources in .spec-driven-files/`);
+        console.log(`📋 Instructions: Complete directory copied to .spec-driven-files/.github/instructions/`);
+        console.log(`🎯 Prompts: Complete directory copied to .spec-driven-files/.github/prompts/`);
+        console.log(`⚙️ VS Code Settings: Complete directory copied to .spec-driven-files/.vscode/`);
+        console.log(`📖 How-to Guides: Complete directory copied to .spec-driven-files/how-to-guides/`);
     }
 
     private groupInstructionsByMode(instructions: Instruction[]): { [mode: string]: Instruction[] } {
@@ -332,7 +333,7 @@ export class CopilotIntegration {
             // Create @workspace references for each instruction using correct file names
             const instructionPaths = instructions.map(instruction => {
                 const fileName = `${instruction.id}.instructions.md`;  // Use the actual filename format
-                return `@workspace .github/instructions/${fileName}`;
+                return `@workspace .spec-driven-files/.github/instructions/${fileName}`;
             });
             
             compactMessage += instructionPaths.join('\n') + '\n';
@@ -340,7 +341,63 @@ export class CopilotIntegration {
 
         if (prompt) {
             const promptFileName = `${prompt.id}.prompt.md`;  // Use the actual prompt filename format
-            compactMessage += `\n🎯 **Task prompt:**\n@workspace .github/prompts/${promptFileName}\n`;
+            compactMessage += `\n🎯 **Task prompt:**\n@workspace .spec-driven-files/.github/prompts/${promptFileName}\n`;
+        }
+        
+        compactMessage += '\n🤖 Help me code following these workspace guidelines!';
+        return compactMessage;
+    }
+
+    private buildCompactCopilotMessageWithContext(
+        message: string, 
+        instructions?: Instruction[], 
+        prompt?: Prompt, 
+        contextPath?: string, 
+        contextType: 'file' | 'folder' | 'directory' = 'file',
+        prompts?: Prompt[],
+        resources?: ResourceFile[]
+    ): string {
+        let compactMessage = message;
+        
+        // Add context reference at the beginning if provided
+        if (contextPath) {
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (workspaceFolder) {
+                const relativePath = path.relative(workspaceFolder.uri.fsPath, contextPath);
+                const contextEmoji = contextType === 'file' ? '📄' : contextType === 'folder' ? '📁' : '📂';
+                compactMessage += `\n\n${contextEmoji} **Working with ${contextType}:**\n@workspace ${relativePath}\n`;
+            }
+        }
+
+        if (instructions && instructions.length > 0) {
+            compactMessage += '\n📋 **Apply these guidelines:**\n';
+            
+            // Create @workspace references for each instruction using correct file names
+            const instructionPaths = instructions.map(instruction => {
+                const fileName = `${instruction.id}.instructions.md`;  // Use the actual filename format
+                return `@workspace .spec-driven-files/.github/instructions/${fileName}`;
+            });
+            
+            compactMessage += instructionPaths.join('\n') + '\n';
+        }
+
+        if (prompt) {
+            const promptFileName = `${prompt.id}.prompt.md`;  // Use the actual prompt filename format
+            compactMessage += `\n🎯 **Task prompt:**\n@workspace .spec-driven-files/.github/prompts/${promptFileName}\n`;
+        }
+
+        // Handle multiple prompts (for Apply Contextual Prompts)
+        if (prompts && prompts.length > 0) {
+            compactMessage += '\n🎯 **Task prompts:**\n';
+            const promptPaths = prompts.map(p => `@workspace .spec-driven-files/.github/prompts/${p.id}.prompt.md`);
+            compactMessage += promptPaths.join('\n') + '\n';
+        }
+
+        // Handle resources (for Add Workspace Guidelines)
+        if (resources && resources.length > 0) {
+            compactMessage += '\n📚 **Workspace guidelines:**\n';
+            const resourcePaths = resources.map(r => `@workspace ${r.relativePath}`);
+            compactMessage += resourcePaths.join('\n') + '\n';
         }
         
         compactMessage += '\n🤖 Help me code following these workspace guidelines!';
@@ -428,7 +485,8 @@ export class CopilotIntegration {
 
     private async createWorkspaceDirectories(workspaceRoot: string): Promise<void> {
         const directories = [
-            '.github',
+            CopilotIntegration.SPEC_DRIVEN_FILES_DIR,
+            CopilotIntegration.SPEC_DRIVEN_FILES_DIR + '/.github',
             CopilotIntegration.GITHUB_INSTRUCTIONS_DIR,
             CopilotIntegration.GITHUB_PROMPTS_DIR,
             CopilotIntegration.WORKSPACE_VSCODE_DIR,
@@ -446,24 +504,16 @@ export class CopilotIntegration {
             }
         }
         
-        // Check if .github already contains other files (workflows, etc.)
-        const githubDir = vscode.Uri.file(path.join(workspaceRoot, '.github'));
+        // Check if workspace already contains .spec-driven-files folder
+        const specDrivenDir = vscode.Uri.file(path.join(workspaceRoot, CopilotIntegration.SPEC_DRIVEN_FILES_DIR));
         try {
-            const githubContents = await vscode.workspace.fs.readDirectory(githubDir);
-            const nonVibeFiles = githubContents.filter(([name]) => 
-                name !== 'instructions' && 
-                name !== 'prompts' && 
-                name !== 'copilot-instructions.md' &&
-                name !== '.vscode' &&
-                name !== 'how-to-guides'
-            );
-            
-            if (nonVibeFiles.length > 0) {
-                console.log(`📁 .github folder contains existing files: ${nonVibeFiles.map(([name]) => name).join(', ')}`);
-                console.log('📁 Vibe Assistant will coexist with existing .github content');
+            const specDrivenContents = await vscode.workspace.fs.readDirectory(specDrivenDir);
+            if (specDrivenContents.length > 0) {
+                console.log(`📁 .spec-driven-files folder exists with: ${specDrivenContents.map(([name]) => name).join(', ')}`);
+                console.log('📁 Spec Driven Development files will be updated/created as needed');
             }
         } catch {
-            // .github directory doesn't exist yet, that's fine
+            // .spec-driven-files directory doesn't exist yet, that's fine
         }
     }
 
@@ -589,6 +639,9 @@ export class CopilotIntegration {
 
         const workspaceRoot = workspaceFolders[0].uri.fsPath;
         const encoder = new TextEncoder();
+        
+        console.log(`🔍 Debug: Copying ${resourceFiles.length} resource files to workspace: ${workspaceRoot}`);
+        console.log(`🔍 Debug: Resource files:`, resourceFiles.map(f => ({ name: f.name, relativePath: f.relativePath })));
         
         for (const resourceFile of resourceFiles) {
             try {
@@ -744,7 +797,7 @@ export class CopilotIntegration {
             // Create @workspace references for each prompt using correct file names
             const promptPaths = prompts.map(prompt => {
                 const fileName = `${prompt.id}.prompt.md`;  // Use the actual filename format
-                return `@workspace .github/prompts/${fileName}`;
+                return `@workspace .spec-driven-files/.github/prompts/${fileName}`;
             });
             
             compactMessage += promptPaths.join('\n') + '\n';
@@ -782,6 +835,64 @@ export class CopilotIntegration {
         }
     }
 
+    public async applyInstructionsToWorkspaceWithAutoPasteForContext(instructions: Instruction[], prompt?: Prompt, contextPath?: string, contextType: 'file' | 'folder' | 'directory' = 'file'): Promise<void> {
+        try {
+            // Create or update the copilot instructions file in workspace
+            await this.createOrUpdateCopilotInstructionsFile(instructions, prompt);
+            
+            // Build message with context and send with auto-paste
+            const instructionSummary = instructions.map(i => i.name).join(', ');
+            let message = `Please help me code with these instructions: ${instructionSummary}`;
+            if (prompt) {
+                message += ` using the prompt: ${prompt.name}`;
+            }
+            
+            const cleanMessage = this.buildCompactCopilotMessageWithContext(message, instructions, prompt, contextPath, contextType);
+            await this.sendToCopilotChatWithAutoPaste(cleanMessage);
+            
+            this.logToOutput(`Applied ${instructions.length} instructions: ${instructions.map(i => i.name).join(', ')}`);
+            if (prompt) {
+                this.logToOutput(`Applied prompt: ${prompt.name}`);
+            }
+            if (contextPath) {
+                this.logToOutput(`Context ${contextType}: ${contextPath}`);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`❌ Failed to apply instructions with auto-paste: ${error}`);
+            this.logToOutput(`Error: ${error}`);
+        }
+    }
+
+    public async sendPromptsToCopilotChatWithAutoPasteForContext(message: string, prompts: Prompt[], contextPath?: string, contextType: 'file' | 'folder' | 'directory' = 'file'): Promise<void> {
+        try {
+            const cleanMessage = this.buildCompactCopilotMessageWithContext(message, undefined, undefined, contextPath, contextType, prompts);
+            await this.sendToCopilotChatWithAutoPaste(cleanMessage);
+            
+            this.logToOutput(`Sent ${prompts.length} prompts to Copilot Chat: ${prompts.map(p => p.name).join(', ')}`);
+            if (contextPath) {
+                this.logToOutput(`Context ${contextType}: ${contextPath}`);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`❌ Failed to send prompts with auto-paste: ${error}`);
+            this.logToOutput(`Error: ${error}`);
+        }
+    }
+
+    public async sendResourcesToCopilotChatWithAutoPasteForContext(message: string, resources: ResourceFile[], contextPath?: string, contextType: 'file' | 'folder' | 'directory' = 'file'): Promise<void> {
+        try {
+            const cleanMessage = this.buildCompactCopilotMessageWithContext(message, undefined, undefined, contextPath, contextType, undefined, resources);
+            await this.sendToCopilotChatWithAutoPaste(cleanMessage);
+            
+            this.logToOutput(`Sent ${resources.length} resources to Copilot Chat: ${resources.map(r => r.name).join(', ')}`);
+            if (contextPath) {
+                this.logToOutput(`Context ${contextType}: ${contextPath}`);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`❌ Failed to send resources with auto-paste: ${error}`);
+            this.logToOutput(`Error: ${error}`);
+        }
+    }
+
     private async updateGitignore(workspaceRoot: string): Promise<void> {
         const gitignorePath = vscode.Uri.file(path.join(workspaceRoot, '.gitignore'));
         const encoder = new TextEncoder();
@@ -798,12 +909,8 @@ export class CopilotIntegration {
             console.log('📝 .gitignore file not found, creating new one');
         }
         
-        // Define the entries to add
-        const githubInstructionsIgnore = '.github/instructions/';
-        const githubPromptsIgnore = '.github/prompts/';
-        const githubCopilotIgnore = '.github/copilot-instructions.md';
-        const workspaceVscodeIgnore = '.vscode/';
-        const workspaceHowtoIgnore = 'how-to-guides/';
+        // Define the entry to add - just the main spec-driven-files folder
+        const specDrivenFilesIgnore = '.spec-driven-files/';
         
         let needsUpdate = false;
         let additions = '';
@@ -814,39 +921,11 @@ export class CopilotIntegration {
             additions += '# Auto-generated AI guidance files - excluded from version control\n';
         }
         
-        // Check and add instructions folder
-        if (!gitignoreContent.includes(githubInstructionsIgnore)) {
-            additions += `${githubInstructionsIgnore}\n`;
+        // Check and add the spec-driven-files folder (this covers all subdirectories)
+        if (!gitignoreContent.includes(specDrivenFilesIgnore)) {
+            additions += `${specDrivenFilesIgnore}\n`;
             needsUpdate = true;
-            console.log('📝 Adding .github/instructions/ to .gitignore');
-        }
-        
-        // Check and add prompts folder
-        if (!gitignoreContent.includes(githubPromptsIgnore)) {
-            additions += `${githubPromptsIgnore}\n`;
-            needsUpdate = true;
-            console.log('📝 Adding .github/prompts/ to .gitignore');
-        }
-        
-        // Check and add .vscode folder
-        if (!gitignoreContent.includes(workspaceVscodeIgnore)) {
-            additions += `${workspaceVscodeIgnore}\n`;
-            needsUpdate = true;
-            console.log('📝 Adding .vscode/ to .gitignore');
-        }
-        
-        // Check and add how-to-guides folder
-        if (!gitignoreContent.includes(workspaceHowtoIgnore)) {
-            additions += `${workspaceHowtoIgnore}\n`;
-            needsUpdate = true;
-            console.log('📝 Adding how-to-guides/ to .gitignore');
-        }
-        
-        // Check and add copilot instructions file
-        if (!gitignoreContent.includes(githubCopilotIgnore)) {
-            additions += `${githubCopilotIgnore}\n`;
-            needsUpdate = true;
-            console.log('📝 Adding .github/copilot-instructions.md to .gitignore');
+            console.log('📝 Adding .spec-driven-files/ to .gitignore');
         }
         
         if (needsUpdate) {
@@ -982,7 +1061,7 @@ export class CopilotIntegration {
 
         for (const instruction of instructions) {
             const fileName = `${instruction.id}.instructions.md`;
-            const relativePath = `.github/instructions/${fileName}`;
+            const relativePath = `.spec-driven-files/.github/instructions/${fileName}`;
             instructionPaths.push(relativePath);
         }
 
@@ -996,7 +1075,7 @@ export class CopilotIntegration {
         }
 
         const fileName = `${prompt.id}.prompt.md`;
-        return `.github/prompts/${fileName}`;
+        return `.spec-driven-files/.github/prompts/${fileName}`;
     }
 
     private async readInstructionFiles(instructions: Instruction[]): Promise<string[]> {
@@ -1020,7 +1099,7 @@ export class CopilotIntegration {
                 const content = decoder.decode(fileContent);
                 instructionContents.push(content);
                 
-                console.log(`📖 Read instruction from: .github/instructions/${fileName}`);
+                console.log(`📖 Read instruction from: .spec-driven-files/.github/instructions/${fileName}`);
             } catch (error) {
                 // Fallback to original instruction content if file doesn't exist
                 console.log(`⚠️ Could not read ${instruction.id}.instructions.md, using original content`);
@@ -1049,7 +1128,7 @@ export class CopilotIntegration {
             const fileContent = await vscode.workspace.fs.readFile(filePath);
             const content = decoder.decode(fileContent);
             
-            console.log(`📖 Read prompt from: .github/prompts/${fileName}`);
+            console.log(`📖 Read prompt from: .spec-driven-files/.github/prompts/${fileName}`);
             return content;
         } catch (error) {
             // Fallback to original prompt content if file doesn't exist

@@ -93,7 +93,7 @@ export class PromptsProvider implements vscode.TreeDataProvider<PromptItem> {
             
             item.contextValue = isAutoSelected ? 'autoSelectedPrompt' : 'prompt';
             item.command = {
-                command: 'vibeAssistant.usePrompt',
+                command: 'specDrivenDevelopment.usePrompt',
                 title: 'Use Prompt',
                 arguments: [prompt]
             };
@@ -184,7 +184,7 @@ export class PromptItem extends vscode.TreeItem {
 }
 
 // Register command to handle prompt clicks
-vscode.commands.registerCommand('vibeAssistant.usePrompt', async (prompt: Prompt) => {
+vscode.commands.registerCommand('specDrivenDevelopment.usePrompt', async (prompt: Prompt) => {
     try {
         // Get current editor context
         const activeEditor = vscode.window.activeTextEditor;
@@ -288,7 +288,7 @@ vscode.commands.registerCommand('vibeAssistant.usePrompt', async (prompt: Prompt
 });
 
 // Register command to preview prompt
-vscode.commands.registerCommand('vibeAssistant.previewPrompt', async (prompt: Prompt) => {
+vscode.commands.registerCommand('specDrivenDevelopment.previewPrompt', async (prompt: Prompt) => {
     try {
         const doc = await vscode.workspace.openTextDocument({
             content: `# ${prompt.name}\n\n**Description:** ${prompt.description}\n\n**Category:** ${prompt.category}\n\n**Mode:** ${prompt.mode}\n\n## Content\n\n${prompt.content}`,

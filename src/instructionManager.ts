@@ -17,15 +17,24 @@ export class InstructionManager {
     private extensionPath: string;
 
     constructor(extensionPath: string) {
-        this.extensionPath = extensionPath;
+        // Handle both development and compiled scenarios
+        // In development: extensionPath points to extension root
+        // In compiled: __dirname is in 'out', so we need to go up one level
+        this.extensionPath = fs.existsSync(path.join(extensionPath, 'resources')) 
+            ? extensionPath 
+            : path.dirname(__dirname);
         this.loadInstructions();
     }
 
     private loadInstructions() {
         const instructionDir = path.join(this.extensionPath, 'resources', 'instructions');
         
+        console.log(`🔍 Debug: Looking for instructions in: ${instructionDir}`);
+        console.log(`🔍 Debug: Extension path: ${this.extensionPath}`);
+        console.log(`🔍 Debug: Instructions directory exists: ${fs.existsSync(instructionDir)}`);
+        
         if (!fs.existsSync(instructionDir)) {
-            vscode.window.showErrorMessage('Instructions directory not found');
+            vscode.window.showErrorMessage(`Instructions directory not found: ${instructionDir}`);
             return;
         }
 
@@ -45,7 +54,8 @@ export class InstructionManager {
             }
         });
 
-        console.log(`Loaded ${this.instructions.size} instruction files`);
+        console.log(`🔍 Debug: Loaded ${this.instructions.size} instruction files from ${instructionDir}`);
+        console.log(`🔍 Debug: Instruction names:`, Array.from(this.instructions.values()).map(i => i.name));
     }
 
     private parseInstruction(fileName: string, content: string, filePath: string): Instruction | null {
