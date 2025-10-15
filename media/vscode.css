@@ -1,0 +1,19 @@
+/* VS Code specific CSS variables and styles */
+body {
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-foreground);
+    font-family: var(--vscode-font-family);
+    font-size: var(--vscode-font-size);
+}
+
+.vscode-light {
+    color-scheme: light;
+}
+
+.vscode-dark {
+    color-scheme: dark;
+}
+
+.vscode-high-contrast {
+    color-scheme: dark;
+}

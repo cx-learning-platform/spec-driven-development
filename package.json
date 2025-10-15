@@ -1,0 +1,414 @@
+{
+  "name": "spec-driven-development",
+  "displayName": "Spec Driven Development",
+  "description": "Supercharge GitHub Copilot with intelligent, context-aware coding instructions and workspace enhancement",
+  "version": "1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Relanto-LKM-POC/spec-driven-development.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Relanto-LKM-POC/spec-driven-development/issues"
+  },
+  "homepage": "https://github.com/Relanto-LKM-POC/spec-driven-development#readme",
+  "publisher": "Gen-Ai-publisher",
+  "license": "MIT",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning",
+    "Education"
+  ],
+  "keywords": [
+    "copilot",
+    "assistant",
+    "code-quality",
+    "best-practices",
+    "go",
+    "python",
+    "terraform"
+  ],
+  "activationEvents": [
+    "onLanguage:go",
+    "onLanguage:python",
+    "onLanguage:terraform",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:bash",
+    "onLanguage:shellscript",
+    "workspaceContains:**/*.go",
+    "workspaceContains:**/*.py",
+    "workspaceContains:**/*.tf",
+    "workspaceContains:package.json",
+    "workspaceContains:go.mod"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "specDrivenDevelopment.analyzeCode",
+        "title": "Analyze Code & Apply Instructions",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.suggestPrompt",
+        "title": "Apply Contextual Prompts",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.openInstructions",
+        "title": "Open Instructions Panel",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.applyCopilotInstructions",
+        "title": "Apply Copilot Instructions",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.showPromptSidebar",
+        "title": "Show Prompts Sidebar",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.applyResourceFiles",
+        "title": "Add Workspace Guidelines",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.openPanel",
+        "title": "Open Spec Driven Development Panel",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.connectAWS",
+        "title": "Connect to AWS",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.refreshAWSConnection",
+        "title": "Refresh AWS Connection",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.listAWSSecrets",
+        "title": "List AWS Secrets",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.retrySalesforceCredentials",
+        "title": "Retry Salesforce Credentials",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.updateJiraIssue",
+        "title": "Update JIRA Issue",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.submitFeature",
+        "title": "Submit Feature",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.viewFeatureHistory",
+        "title": "View Feature History",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.exportFeatureHistory",
+        "title": "Export Feature History",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.clearFeatureHistory",
+        "title": "Clear Feature History",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.configureGitHubToken",
+        "title": "Configure GitHub Token",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.parseCopilotEstimation",
+        "title": "Parse Copilot Estimation from Chat",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.analyzeFolderCode",
+        "title": "Analyze Folder & Apply Instructions",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.analyzeWorkspaceCode", 
+        "title": "Analyze Workspace & Apply Instructions",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.applyFolderPrompts",
+        "title": "Apply Folder Contextual Prompts",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.applyWorkspacePrompts",
+        "title": "Apply Workspace Contextual Prompts", 
+        "category": "Spec Driven Development"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "specDrivenDevelopment.analyzeCode",
+          "group": "specdd@1",
+          "when": "editorHasSelection || editorTextFocus"
+        },
+        {
+          "command": "specDrivenDevelopment.suggestPrompt",
+          "group": "specdd@2",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "specDrivenDevelopment.applyResourceFiles",
+          "group": "specdd@3",
+          "when": "editorTextFocus"
+        },
+        {
+          "command": "specDrivenDevelopment.openPanel",
+          "group": "specdd@4",
+          "when": "editorTextFocus"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "specDrivenDevelopment.analyzeCode",
+          "group": "specdd@1",
+          "when": "!explorerResourceIsFolder"
+        },
+        {
+          "command": "specDrivenDevelopment.suggestPrompt",
+          "group": "specdd@2",
+          "when": "!explorerResourceIsFolder"
+        },
+        {
+          "command": "specDrivenDevelopment.applyResourceFiles",
+          "group": "specdd@3",
+          "when": "!explorerResourceIsFolder"
+        },
+        {
+          "command": "specDrivenDevelopment.analyzeFolderCode",
+          "group": "specdd@4",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "specDrivenDevelopment.applyFolderPrompts",
+          "group": "specdd@5",
+          "when": "explorerResourceIsFolder"
+        },
+        {
+          "command": "specDrivenDevelopment.applyResourceFiles",
+          "group": "specdd@6",
+          "when": "explorerResourceIsFolder"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "specDrivenDevelopment.applyCopilotInstructions",
+          "group": "navigation@1",
+          "when": "resourceExtname =~ /\\.(go|py|tf|sh|bash|js|ts)$/"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "specDrivenDevelopment.analyzeCode",
+          "when": "editorIsOpen"
+        },
+        {
+          "command": "specDrivenDevelopment.suggestPrompt",
+          "when": "editorIsOpen"
+        }
+      ]
+    },
+    "views": {
+      "specDrivenDevelopment": [
+        {
+          "id": "specDrivenDevelopmentPanel",
+          "type": "webview",
+          "name": "Spec Driven Development",
+          "when": "true",
+          "icon": "$(dashboard)"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "specDrivenDevelopment",
+          "title": "Spec Driven Development",
+          "icon": "$(dashboard)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Spec Driven Development",
+      "properties": {
+        "specDrivenDevelopment.autoApplyInstructions": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically apply relevant instructions when opening files"
+        },
+        "specDrivenDevelopment.enableContextualPrompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable contextual prompt suggestions"
+        },
+        "specDrivenDevelopment.showNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show notifications when instructions are applied"
+        },
+        "specDrivenDevelopment.supportedLanguages": {
+          "type": "array",
+          "default": [
+            "go",
+            "python",
+            "terraform",
+            "bash",
+            "javascript",
+            "typescript"
+          ],
+          "description": "List of supported programming languages"
+        },
+        "specDrivenDevelopment.autoIgnoreAIFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically add AI instruction files to .gitignore to keep repositories clean"
+        },
+        "specDrivenDevelopment.awsProfile": {
+          "type": "string",
+          "default": "",
+          "description": "AWS CLI profile to use for authentication (leave empty to use default profile)"
+        },
+        "specDrivenDevelopment.awsRegion": {
+          "type": "string",
+          "default": "",
+          "description": "AWS region for services (leave empty to use default region from AWS CLI)"
+        },
+        "specDrivenDevelopment.salesforceSecretName": {
+          "type": "string",
+          "default": "salesforce",
+          "description": "Name of the AWS Secrets Manager secret containing Salesforce credentials"
+        },
+        "specDrivenDevelopment.salesforceSecretKeywords": {
+          "type": "array",
+          "default": ["salesforce", "sf", "crm", "sales", "force"],
+          "description": "Keywords to search for when looking for Salesforce secrets (fallback if exact name not found)"
+        },
+        "specDrivenDevelopment.enableEstimationParsing": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically parse time estimations from Copilot responses"
+        },
+        "specDrivenDevelopment.enableAutoDocumentParsing": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically scan documents for estimations when they change (may cause unwanted notifications)"
+        },
+        "specDrivenDevelopment.jiraAutoUpdate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically update JIRA issues when estimations are detected"
+        },
+        "specDrivenDevelopment.notifications.showProgress": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show progress notifications during operations"
+        },
+        "specDrivenDevelopment.notifications.showSuccess": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show success notifications after operations complete"
+        },
+        "specDrivenDevelopment.notifications.showErrors": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show error notifications when operations fail"
+        },
+        "specDrivenDevelopment.notifications.consolidateMessages": {
+          "type": "boolean",
+          "default": true,
+          "description": "Consolidate multiple related notifications into one"
+        },
+        "specDrivenDevelopment.notifications.verboseMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show detailed information in notifications"
+        },
+        "specDrivenDevelopment.githubToken": {
+          "type": "string",
+          "default": "",
+          "description": "GitHub Personal Access Token for creating issues (requires 'repo' or 'public_repo' scope)"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "specDrivenDevelopment.analyzeCode",
+        "key": "ctrl+shift+s a",
+        "mac": "cmd+shift+s a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "specDrivenDevelopment.suggestPrompt",
+        "key": "ctrl+shift+s p",
+        "mac": "cmd+shift+s p",
+        "when": "editorTextFocus"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package:webpack",
+    "compile": "tsc -p ./",
+    "compile:clean": "rimraf out && npm run compile",
+    "watch": "tsc -watch -p ./",
+    "package:webpack": "webpack --mode production --devtool hidden-source-map",
+    "watch:webpack": "webpack --watch",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts --fix",
+    "lint:check": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "clean": "rimraf out",
+    "dev": "npm run watch"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.74.0",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "@vscode/test-electron": "^2.2.0",
+    "@vscode/vsce": "^3.6.1",
+    "eslint": "^8.28.0",
+    "ts-loader": "^9.5.4",
+    "typescript": "^4.9.4",
+    "webpack": "^5.101.3",
+    "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "glob": "^8.0.3",
+    "yaml": "^2.2.1",
+    "aws-sdk": "^2.1460.0",
+    "node-fetch": "^3.3.2",
+    "@types/node-fetch": "^2.6.4",
+    "dotenv": "^16.3.1"
+  },
+  "extensionDependencies": []
+}
