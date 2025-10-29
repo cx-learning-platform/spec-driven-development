@@ -11,7 +11,8 @@ import { EstimationParser } from './services/estimationParser';
 import { JiraService } from './services/jiraService';
 import { FeedbackService } from './services/feedbackService';
 import { TaskService } from './services/taskService';
-import { config } from './utils/configurationManager';
+import { TaskMasterService } from './services/taskMasterService';
+// GitHub configuration removed - only using Salesforce config now
 import { NotificationManager } from './services/notificationManager';
 
 let instructionManager: InstructionManager;
@@ -27,10 +28,8 @@ let feedbackService: FeedbackService;
 let taskService: TaskService;
 let notificationManager: NotificationManager;
 
-// Global timeout variable
-declare global {
-    var vibeAnalysisTimeout: any;
-}
+// Module-level timeout variable for debouncing
+let vibeAnalysisTimeout: NodeJS.Timeout | undefined;
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('🎯 Spec Driven Development is now active!');
@@ -91,14 +90,11 @@ export async function activate(context: vscode.ExtensionContext) {
             const action = await vscode.window.showInformationMessage(
                 '🎉 Welcome to Spec Driven Development! Click the status bar to open the management panel with AWS integration, JIRA connectivity, and feedback system.',
                 'Open Panel',
-                'Learn More',
                 'Got it'
             );
             
             if (action === 'Open Panel') {
                 vscode.commands.executeCommand('specDrivenDevelopment.openPanel');
-            } else if (action === 'Learn More') {
-                vscode.env.openExternal(vscode.Uri.parse(config.getDocumentationUrls().readme));
             }
             
             await context.globalState.update('hasShownWelcome', true);
@@ -155,9 +151,6 @@ function registerCommands(context: vscode.ExtensionContext) {
                 return;
             }
 
-            // Mark as manual command to show notifications
-            copilotIntegration.setManualCommand();
-
             const result = await notificationManager.withProgress(
                 'analyze-code',
                 'Analyzing code and applying instructions...',
@@ -165,7 +158,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                     progress.report({ increment: 20, message: "Analyzing file context..." });
 
                     // Analyze current context
-                    const codeContext = contextAnalyzer.analyzeCurrentContext();
+                    const codeContext = contextAnalyzer.analyzeDocument(activeEditor.document);
                     
                     // Get all instructions with pre-selection based on current file
                     const instructionsWithSelection = instructionManager.getAllInstructionsWithSelection(activeEditor.document.fileName);
@@ -339,9 +332,6 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showWarningMessage('No active editor found');
                 return;
             }
-
-            // Mark as manual command to show notifications
-            copilotIntegration.setManualCommand();
 
             const instructions = instructionManager.getInstructionsForFile(activeEditor.document.fileName);
             
@@ -746,9 +736,17 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.sendInitiatives(initiatives);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load initiatives: ${(error as Error).message}`);
+            const errorMessage = (error as Error).message;
+            console.error('Failed to load initiatives:', errorMessage);
+            
+            // Send user-friendly error message to UI instead of showing intrusive popup
             if (specDrivenDevelopmentPanel) {
-                specDrivenDevelopmentPanel.sendInitiatives([]);
+                specDrivenDevelopmentPanel.sendInitiativesError(errorMessage);
+            }
+            
+            // Only show VS Code notification for critical errors
+            if (errorMessage.includes('AWS connection') || errorMessage.includes('credentials')) {
+                vscode.window.showWarningMessage(`Initiatives unavailable: ${errorMessage}`);
             }
         }
     });
@@ -767,9 +765,107 @@ function registerCommands(context: vscode.ExtensionContext) {
         }
     });
 
+    const loadEpicsForInitiativeCommand = vscode.commands.registerCommand('specDrivenDevelopment.loadEpicsForInitiative', async (jiraTeam: string) => {
+        try {
+            console.log(`Loading epics for Jira team: ${jiraTeam}`);
+            const epics = await feedbackService.getEpicsFromInitiative(jiraTeam);
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendEpics(epics);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to load epics for initiative: ${(error as Error).message}`);
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendEpics([]);
+            }
+        }
+    });
+
+    const loadSprintDetailsCommand = vscode.commands.registerCommand('specDrivenDevelopment.loadSprintDetails', async () => {
+        try {
+            const sprints = await feedbackService.getSprintDetails();
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendSprintDetails(sprints);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to load sprint details: ${(error as Error).message}`);
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendSprintDetails([]);
+            }
+        }
+    });
+
+    const loadSprintsForTeamCommand = vscode.commands.registerCommand('specDrivenDevelopment.loadSprintsForTeam', async (teamName: string) => {
+        try {
+            console.log(`Loading sprints for team: ${teamName}`);
+            const sprints = await feedbackService.getSprintsForTeam(teamName);
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendSprintDetails(sprints);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to load sprints for team: ${(error as Error).message}`);
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendSprintDetails([]);
+            }
+        }
+    });
+
+    const autoPopulateFromGitCommand = vscode.commands.registerCommand('specDrivenDevelopment.autoPopulateFromGit', async () => {
+        try {
+            console.log('Auto-populate from Git command triggered');
+            const result = await feedbackService.autoPopulateFromGit();
+            
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendAutoPopulationResult(result);
+            }
+            
+            // Log result for debugging
+            if (result.success) {
+                console.log(`Auto-population successful: ${result.repoName} → ${result.applicationName} → ${result.recommendedInitiativeName}`);
+            } else {
+                console.log(`Auto-population failed: ${result.fallbackReason}`);
+            }
+        } catch (error) {
+            console.error('Error in autoPopulateFromGitCommand:', error);
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendAutoPopulationResult({
+                    success: false,
+                    initiatives: [],
+                    epics: [],
+                    autoPopulated: false,
+                    fallbackReason: `Error: ${(error as Error).message}`
+                });
+            }
+        }
+    });
+
     const submitFeedbackCommand = vscode.commands.registerCommand('specDrivenDevelopment.submitFeedback', async (data: any) => {
         try {
             const result = await feedbackService.submitFeedback(data);
+            
+            // If submission was successful and data contains TaskMaster task info, store it
+            if (result.success && data.taskMasterTask) {
+                try {
+                    const submittedTasks = context.globalState.get<any[]>('specDrivenDevelopment.submittedTaskMasterTasks', []);
+                    
+                    const newSubmission = {
+                        taskId: data.taskMasterTask.id,
+                        taskTitle: data.taskMasterTask.title,
+                        submittedAt: new Date().toISOString(),
+                        ticketId: result.ticketId,
+                        jiraUrl: result.jiraUrl, // Store Jira URL for duplicate checking
+                        epicId: data.epicId
+                    };
+                    
+                    // Add to submitted tasks list
+                    submittedTasks.push(newSubmission);
+                    await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', submittedTasks);
+                    
+                    console.log(`TaskMaster task ${data.taskMasterTask.id} marked as submitted: ${result.ticketId}`);
+                } catch (storageError) {
+                    console.error('Failed to store TaskMaster submission info:', storageError);
+                    // Don't fail the whole submission for storage errors
+                }
+            }
             
             // Send result back to webview
             if (specDrivenDevelopmentPanel) {
@@ -778,7 +874,15 @@ function registerCommands(context: vscode.ExtensionContext) {
 
             // Also show VS Code notification
             if (result.success) {
-                vscode.window.showInformationMessage(`✅ Feature submitted successfully! Ticket: ${result.ticketId}`);
+                // Extract Jira ticket ID from URL if available
+                let displayTicketId = result.ticketId || 'Unknown';
+                if (result.jiraUrl) {
+                    const extractedTicketId = taskService.extractJiraTicketId(result.jiraUrl);
+                    if (extractedTicketId) {
+                        displayTicketId = extractedTicketId;
+                    }
+                }
+                vscode.window.showInformationMessage(`✅ Feature submitted successfully! Ticket: ${displayTicketId}`);
             } else {
                 vscode.window.showErrorMessage(`❌ Failed to submit feature: ${result.error}`);
             }
@@ -796,6 +900,136 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
             
             vscode.window.showErrorMessage(errorMessage);
+        }
+    });
+
+    const importTaskMasterCommand = vscode.commands.registerCommand('specDrivenDevelopment.importTaskMaster', async () => {
+        try {
+            const taskDataArray = await TaskMasterService.loadTaskFromWorkspace();
+            
+            // Send data to webview
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendTaskMasterData(taskDataArray);
+            }
+
+            if (taskDataArray.length === 1) {
+                vscode.window.showInformationMessage('TaskMaster task imported successfully!');
+            } else {
+                vscode.window.showInformationMessage(`Found ${taskDataArray.length} tasks. Please select one to import.`);
+            }
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            vscode.window.showErrorMessage(`Failed to import TaskMaster data: ${errorMessage}`);
+            
+            // Send error to webview so it can re-enable the button
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendTaskMasterError(errorMessage);
+            }
+        }
+    });
+
+    const checkDuplicateTaskMasterCommand = vscode.commands.registerCommand('specDrivenDevelopment.checkDuplicateTaskMaster', async (data: any) => {
+        try {
+            // Get stored submitted tasks from global state
+            const submittedTasks = context.globalState.get<any[]>('specDrivenDevelopment.submittedTaskMasterTasks', []);
+            
+            // Check if current task was already submitted
+            const existingSubmission = submittedTasks.find(task => task.taskId === data.taskId);
+            
+            // If there's a previous submission, verify the JIRA ticket still exists
+            if (existingSubmission && existingSubmission.jiraUrl) {
+                try {
+                    // Extract JIRA ticket ID from URL
+                    const jiraTicketId = taskService.extractJiraTicketId(existingSubmission.jiraUrl);
+                    if (jiraTicketId) {
+                        console.log(`Verifying if JIRA ticket ${jiraTicketId} still exists...`);
+                        
+                        // Verify ticket exists in JIRA
+                        const validationResult = await jiraService.validateJiraIssue(jiraTicketId);
+                        
+                        if (!validationResult.isValid) {
+                            // Ticket no longer exists, remove from cache and allow resubmission
+                            console.log(`JIRA ticket ${jiraTicketId} no longer exists. Removing from cache and allowing resubmission.`);
+                            const updatedTasks = submittedTasks.filter(task => task.taskId !== data.taskId);
+                            await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', updatedTasks);
+                            
+                            // Allow submission to proceed
+                            const result = {
+                                isDuplicate: false,
+                                feedbackData: data.feedbackData,
+                                previousSubmission: null
+                            };
+                            
+                            if (specDrivenDevelopmentPanel) {
+                                specDrivenDevelopmentPanel.sendDuplicateCheckResult(result);
+                            }
+                            return;
+                        }
+                        
+                        // Check if ticket status is DONE
+                        if (validationResult.status && validationResult.status.toUpperCase() === 'DONE') {
+                            // Ticket is marked as DONE, remove from cache and allow resubmission
+                            console.log(`JIRA ticket ${jiraTicketId} is marked as DONE. Removing from cache and allowing resubmission.`);
+                            const updatedTasks = submittedTasks.filter(task => task.taskId !== data.taskId);
+                            await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', updatedTasks);
+                            
+                            // Allow submission to proceed
+                            const result = {
+                                isDuplicate: false,
+                                feedbackData: data.feedbackData,
+                                previousSubmission: null
+                            };
+                            
+                            if (specDrivenDevelopmentPanel) {
+                                specDrivenDevelopmentPanel.sendDuplicateCheckResult(result);
+                            }
+                            return;
+                        }
+                        
+                        console.log(`JIRA ticket ${jiraTicketId} still exists with status: ${validationResult.status || 'Unknown'}. Showing duplicate warning.`);
+                    }
+                } catch (validationError) {
+                    console.error('Error validating JIRA ticket existence:', validationError);
+                    // If validation fails, assume ticket might not exist and remove from cache
+                    const updatedTasks = submittedTasks.filter(task => task.taskId !== data.taskId);
+                    await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', updatedTasks);
+                    
+                    // Allow submission to proceed
+                    const result = {
+                        isDuplicate: false,
+                        feedbackData: data.feedbackData,
+                        previousSubmission: null
+                    };
+                    
+                    if (specDrivenDevelopmentPanel) {
+                        specDrivenDevelopmentPanel.sendDuplicateCheckResult(result);
+                    }
+                    return;
+                }
+            }
+            
+            const result = {
+                isDuplicate: !!existingSubmission,
+                feedbackData: data.feedbackData,
+                previousSubmission: existingSubmission || null
+            };
+
+            // Send result back to webview
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendDuplicateCheckResult(result);
+            }
+        } catch (error) {
+            console.error('Error checking duplicate TaskMaster submission:', error);
+            // On error, allow submission to proceed
+            const result = {
+                isDuplicate: false,
+                feedbackData: data.feedbackData,
+                previousSubmission: null
+            };
+            
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendDuplicateCheckResult(result);
+            }
         }
     });
 
@@ -876,108 +1110,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         }
     });
 
-    const configureGitHubTokenCommand = vscode.commands.registerCommand('specDrivenDevelopment.configureGitHubToken', async () => {
-        try {
-            const currentToken = config.getGitHubToken();
-            const hasToken = currentToken && currentToken.length > 0;
-            
-            const message = hasToken 
-                ? 'GitHub token is configured. Do you want to update it?'
-                : 'GitHub token is required to create issues directly. Do you want to configure it now?';
-                
-            const actions = hasToken 
-                ? ['Configure Token', 'Help', 'Test Token']
-                : ['Configure Token', 'Help'];
-            
-            const action = await vscode.window.showInformationMessage(message, ...actions);
-
-            if (action === 'Configure Token') {
-                const token = await vscode.window.showInputBox({
-                    prompt: 'Enter your GitHub Personal Access Token',
-                    password: true,
-                    placeHolder: 'ghp_xxxxxxxxxxxxxxxxxxxx',
-                    value: hasToken ? '***********' : '',
-                    validateInput: (value) => {
-                        if (!value || value.length < 10) {
-                            return 'Please enter a valid GitHub token';
-                        }
-                        if (value === '***********') {
-                            return 'Please enter your actual token, not the placeholder';
-                        }
-                        return null;
-                    }
-                });
-
-                if (token && token !== '***********') {
-                    await config.setGitHubToken(token);
-                    vscode.window.showInformationMessage('✅ GitHub token configured successfully!');
-                }
-            } else if (action === 'Help') {
-                const helpMessage = `To create a GitHub Personal Access Token:
-
-1. Go to GitHub Settings → Developer settings → Personal access tokens
-2. Click "Generate new token (classic)"
-3. Give it a name like "Spec Driven Development Extension"
-4. Select scopes: 'repo' (for private repos) or 'public_repo' (for public repos only)
-5. Click "Generate token"
-6. Copy the token (you won't see it again!)
-7. Run this command again to configure it
-
-Token will be stored securely in VS Code settings.`;
-                
-                vscode.window.showInformationMessage(helpMessage, 'Open GitHub Settings').then(result => {
-                    if (result === 'Open GitHub Settings') {
-                        vscode.env.openExternal(vscode.Uri.parse(config.getDocumentationUrls().tokenSettings));
-                    }
-                });
-            } else if (action === 'Test Token') {
-                // Test the current token by making a simple API call
-                vscode.window.showInformationMessage('Testing GitHub token...');
-                try {
-                    // Test authentication
-                    const userResponse = await fetch(`${config.getApiEndpoints().github.baseUrl}/user`, {
-                        headers: {
-                            'Authorization': `token ${currentToken}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-                    
-                    if (!userResponse.ok) {
-                        vscode.window.showErrorMessage('❌ Token is invalid or expired. Please reconfigure.');
-                        return;
-                    }
-                    
-                    const user = await userResponse.json();
-                    
-                    // Test repository access
-                    const repoResponse = await fetch(`${config.getApiEndpoints().github.baseUrl}/repos/${config.getApiEndpoints().github.repoOwner}/${config.getApiEndpoints().github.repoName}`, {
-                        headers: {
-                            'Authorization': `token ${currentToken}`,
-                            'Accept': 'application/vnd.github.v3+json'
-                        }
-                    });
-                    
-                    if (!repoResponse.ok) {
-                        vscode.window.showErrorMessage('❌ Token cannot access repository. Please check permissions.');
-                        return;
-                    }
-                    
-                    const repo = await repoResponse.json();
-                    const permissions = repo.permissions || {};
-                    
-                    if (permissions.push || permissions.admin) {
-                        vscode.window.showInformationMessage(`✅ Token is valid and can create issues!\nAuthenticated as: ${user.login}\nRepository access: ✅ Write permissions`);
-                    } else {
-                        vscode.window.showWarningMessage(`⚠️ Token is valid but has limited permissions.\nAuthenticated as: ${user.login}\nRepository access: ❌ Read-only\n\nTo create issues, please update your token with 'repo' scope.`);
-                    }
-                } catch (error) {
-                    vscode.window.showErrorMessage(`❌ Failed to test token: ${(error as Error).message}`);
-                }
-            }
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to configure GitHub token: ${(error as Error).message}`);
-        }
-    });
+    // GitHub token configuration command removed - not needed for Salesforce-only functionality
 
     // Analyze Folder Code & Apply Instructions
     const analyzeFolderCodeCommand = vscode.commands.registerCommand('specDrivenDevelopment.analyzeFolderCode', async (folderUri: vscode.Uri) => {
@@ -986,9 +1119,6 @@ Token will be stored securely in VS Code settings.`;
                 vscode.window.showWarningMessage('No folder selected');
                 return;
             }
-
-            // Mark as manual command to show notifications
-            copilotIntegration.setManualCommand();
 
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -1067,9 +1197,6 @@ Token will be stored securely in VS Code settings.`;
     // Analyze Workspace Code & Apply Instructions
     const analyzeWorkspaceCodeCommand = vscode.commands.registerCommand('specDrivenDevelopment.analyzeWorkspaceCode', async () => {
         try {
-            // Mark as manual command to show notifications
-            copilotIntegration.setManualCommand();
-
             vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: 'Analyzing entire workspace...',
@@ -1281,26 +1408,26 @@ Token will be stored securely in VS Code settings.`;
     // Task Management Commands
     const retrieveWipTasksCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveWipTasks', async (options: any = {}) => {
         try {
-            console.log('Retrieve WIP tasks command triggered with options:', options);
+            console.log('Retrieve WIP tickets command triggered with options:', options);
             
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
-                title: 'Retrieving WIP tasks...',
+                title: 'Retrieving WIP tickets...',
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
                 console.log('Checking AWS connection status...');
                 
-                progress.report({ increment: 30, message: 'Fetching WIP tasks from Salesforce...' });
+                progress.report({ increment: 30, message: 'Fetching WIP tickets from Salesforce...' });
                 console.log('Calling taskService.retrieveWipTasks()...');
                 
                 const result = await taskService.retrieveWipTasks(options);
-                console.log(`Retrieved ${result.tasks.length} WIP tasks (${result.totalCount} total):`, result);
+                console.log(`Retrieved ${result.tasks.length} WIP tickets (${result.totalCount} total):`, result);
                 
                 const foundStartRecord = (options.offset || 0) + 1;
                 const foundEndRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
                 const foundRangeText = result.totalCount > 0 ? `${foundStartRecord}-${foundEndRecord} of ${result.totalCount}` : result.tasks.length.toString();
-                progress.report({ increment: 50, message: `Found ${foundRangeText} WIP tasks` });
+                progress.report({ increment: 50, message: `Found ${foundRangeText} WIP tickets` });
                 
                 if (specDrivenDevelopmentPanel) {
                     console.log('Sending WIP task list to webview...');
@@ -1319,11 +1446,11 @@ Token will be stored securely in VS Code settings.`;
                 const startRecord = (options.offset || 0) + 1;
                 const endRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
                 const rangeText = result.totalCount > 0 ? `${startRecord}-${endRecord} of ${result.totalCount}` : result.tasks.length.toString();
-                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} WIP tasks${searchText}`);
+                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} WIP tickets${searchText}`);
             });
         } catch (error) {
             console.error('Error in retrieveWipTasksCommand:', error);
-            vscode.window.showErrorMessage(`Failed to retrieve WIP tasks: ${(error as Error).message}`);
+            vscode.window.showErrorMessage(`Failed to retrieve WIP tickets: ${(error as Error).message}`);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendTaskList([], 'wip', { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 20 });
             }
@@ -1332,21 +1459,21 @@ Token will be stored securely in VS Code settings.`;
 
     const retrieveRunningTasksCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveRunningTasks', async (options: any = {}) => {
         try {
-            console.log('Retrieve running tasks command triggered with options:', options);
+            console.log('Retrieve all tickets command triggered with options:', options);
             
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
-                title: 'Retrieving running tasks...',
+                title: 'Retrieving all tickets...',
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
                 console.log('Checking AWS connection status...');
                 
-                progress.report({ increment: 30, message: 'Fetching tasks from Salesforce...' });
+                progress.report({ increment: 30, message: 'Fetching tickets from Salesforce...' });
                 console.log('Calling taskService.retrieveRunningTasks()...');
                 
                 const result = await taskService.retrieveRunningTasks(options);
-                console.log(`Retrieved ${result.tasks.length} running tasks (${result.totalCount} total):`, result);
+                console.log(`Retrieved ${result.tasks.length} tickets (${result.totalCount} total):`, result);
                 
                 const foundStartRecord = (options.offset || 0) + 1;
                 const foundEndRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
@@ -1370,11 +1497,11 @@ Token will be stored securely in VS Code settings.`;
                 const startRecord = (options.offset || 0) + 1;
                 const endRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
                 const rangeText = result.totalCount > 0 ? `${startRecord}-${endRecord} of ${result.totalCount}` : result.tasks.length.toString();
-                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} tasks${searchText}`);
+                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} tickets${searchText}`);
             });
         } catch (error) {
             console.error('Error in retrieveRunningTasksCommand:', error);
-            vscode.window.showErrorMessage(`Failed to retrieve tasks: ${(error as Error).message}`);
+            vscode.window.showErrorMessage(`Failed to retrieve tickets: ${(error as Error).message}`);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendTaskList([], 'running', { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 20 });
             }
@@ -1383,29 +1510,29 @@ Token will be stored securely in VS Code settings.`;
 
     const retrieveArchivedTasksCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveArchivedTasks', async (options: any = {}) => {
         try {
-            console.log('Retrieve archived tasks command triggered with options:', options);
+            console.log('Retrieve done tickets command triggered with options:', options);
             
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
-                title: 'Retrieving archived tasks...',
+                title: 'Retrieving done tickets...',
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
                 console.log('Checking AWS connection status...');
                 
-                progress.report({ increment: 30, message: 'Fetching archived tasks from Salesforce...' });
+                progress.report({ increment: 30, message: 'Fetching done tickets from Salesforce...' });
                 console.log('Calling taskService.retrieveArchivedTasks()...');
                 
                 const result = await taskService.retrieveArchivedTasks(options);
-                console.log(`Retrieved ${result.tasks.length} archived tasks (${result.totalCount} total):`, result);
+                console.log(`Retrieved ${result.tasks.length} done tickets (${result.totalCount} total):`, result);
                 
                 const foundStartRecord = (options.offset || 0) + 1;
                 const foundEndRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
                 const foundRangeText = result.totalCount > 0 ? `${foundStartRecord}-${foundEndRecord} of ${result.totalCount}` : result.tasks.length.toString();
-                progress.report({ increment: 50, message: `Found ${foundRangeText} archived tasks` });
+                progress.report({ increment: 50, message: `Found ${foundRangeText} done tickets` });
                 
                 if (specDrivenDevelopmentPanel) {
-                    console.log('Sending archived task list to webview...');
+                    console.log('Sending done ticket list to webview...');
                     specDrivenDevelopmentPanel.sendTaskList(result.tasks, 'archived', {
                         totalCount: result.totalCount,
                         hasMore: result.hasMore,
@@ -1421,11 +1548,11 @@ Token will be stored securely in VS Code settings.`;
                 const startRecord = (options.offset || 0) + 1;
                 const endRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
                 const rangeText = result.totalCount > 0 ? `${startRecord}-${endRecord} of ${result.totalCount}` : result.tasks.length.toString();
-                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} archived tasks${searchText}`);
+                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} done tickets${searchText}`);
             });
         } catch (error) {
             console.error('Error in retrieveArchivedTasksCommand:', error);
-            vscode.window.showErrorMessage(`Failed to retrieve archived tasks: ${(error as Error).message}`);
+            vscode.window.showErrorMessage(`Failed to retrieve done tickets: ${(error as Error).message}`);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendTaskList([], 'archived', { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 20 });
             }
@@ -1489,8 +1616,8 @@ Token will be stored securely in VS Code settings.`;
 
     const saveTaskUpdatesCommand = vscode.commands.registerCommand('specDrivenDevelopment.saveTaskUpdates', async (updateData: any) => {
         try {
-            const { taskId, updates } = updateData;
-            console.log('Save task updates command triggered:', taskId, updates);
+            const { taskId, updates, taskType } = updateData;
+            console.log('Save task updates command triggered:', taskId, updates, 'taskType:', taskType);
             
             const result = await taskService.updateTask(taskId, updates);
             
@@ -1500,8 +1627,15 @@ Token will be stored securely in VS Code settings.`;
             
             if (result.success) {
                 vscode.window.showInformationMessage('✅ Task updated successfully!');
-                // Refresh the task list
-                vscode.commands.executeCommand('specDrivenDevelopment.retrieveRunningTasks');
+                // Refresh the appropriate task list based on which list was being viewed
+                if (taskType === 'wip') {
+                    vscode.commands.executeCommand('specDrivenDevelopment.retrieveWipTasks');
+                } else if (taskType === 'archived') {
+                    vscode.commands.executeCommand('specDrivenDevelopment.retrieveArchivedTasks');
+                } else {
+                    // Default to running tasks list
+                    vscode.commands.executeCommand('specDrivenDevelopment.retrieveRunningTasks');
+                }
             } else {
                 vscode.window.showErrorMessage(`❌ Failed to update task: ${result.message}`);
             }
@@ -1544,9 +1678,39 @@ Token will be stored securely in VS Code settings.`;
     const cleanupTaskCommand = vscode.commands.registerCommand('specDrivenDevelopment.cleanupTask', async (taskData: any) => {
         try {
             const { taskId, taskName } = taskData;
-            console.log('Cleanup task command triggered for:', taskId, taskName);
+            console.log('Marking task as Done in Salesforce:', taskId, taskName);
             
-            const result = await taskService.cleanupTask(taskId);
+            // Retrieve full task object to get CreatedDate and other fields
+            const wipResult = await taskService.retrieveWipTasks({ limit: 1000 });
+            const fullTask = wipResult.tasks.find((t: any) => t.Id === taskId);
+            
+            if (!fullTask) {
+                throw new Error('Task not found in WIP list');
+            }
+            
+            // Extract ticket number from Jira link
+            const ticketNumber = taskService.extractTicketNumber(fullTask.Jira_Link__c);
+            
+            // Calculate actual hours and deployment date for confirmation dialog
+            const actualHours = taskService.calculateActualHours(fullTask.CreatedDate || new Date().toISOString());
+            const deploymentDate = new Date().toISOString().split('T')[0];
+            
+            // Show confirmation dialog with ticket details
+            const confirmMessage = `Are you sure you want to submit ticket ${ticketNumber}?\n\nActual Hours: ${actualHours}\nDeployment Date: ${deploymentDate}`;
+            const confirmation = await vscode.window.showWarningMessage(
+                confirmMessage,
+                { modal: true },
+                'Yes, Submit'
+            );
+            
+            // If user cancels, exit early
+            if (confirmation !== 'Yes, Submit') {
+                console.log('User cancelled ticket submission');
+                return;
+            }
+            
+            // Call cleanupTask with full task object
+            const result = await taskService.cleanupTask(fullTask);
             
             if (specDrivenDevelopmentPanel) {
                 // Send result with task ID for UI removal
@@ -1554,13 +1718,13 @@ Token will be stored securely in VS Code settings.`;
             }
             
             if (result.success) {
-                vscode.window.showInformationMessage(`✅ Task "${taskName}" removed from list`);
+                vscode.window.showInformationMessage(`✅ Ticket ${ticketNumber} marked as done successfully!`);
             } else {
-                vscode.window.showErrorMessage(`❌ Failed to cleanup task: ${result.message}`);
+                vscode.window.showErrorMessage(`❌ Failed to mark ticket as Done: ${result.message}`);
             }
         } catch (error) {
             console.error('Error in cleanupTaskCommand:', error);
-            vscode.window.showErrorMessage(`Failed to cleanup task: ${(error as Error).message}`);
+            vscode.window.showErrorMessage(`Failed to mark ticket as Done: ${(error as Error).message}`);
         }
     });
 
@@ -1587,11 +1751,16 @@ Token will be stored securely in VS Code settings.`;
         updateJiraIssueCommand,
         loadInitiativesCommand,
         loadEpicsCommand,
+        loadEpicsForInitiativeCommand,
+        loadSprintDetailsCommand,
+        loadSprintsForTeamCommand,
+        autoPopulateFromGitCommand,
         submitFeedbackCommand,
+        importTaskMasterCommand,
+        checkDuplicateTaskMasterCommand,
         viewFeedbackHistoryCommand,
         exportFeedbackHistoryCommand,
         clearFeedbackHistoryCommand,
-        configureGitHubTokenCommand,
         analyzeFolderCodeCommand,
         analyzeWorkspaceCodeCommand,
         applyFolderPromptsCommand,
@@ -1612,40 +1781,51 @@ Token will be stored securely in VS Code settings.`;
 function setupEventListeners(context: vscode.ExtensionContext) {
     // Listen for active editor changes
     const activeEditorChange = vscode.window.onDidChangeActiveTextEditor(async (editor: vscode.TextEditor | undefined) => {
-        if (editor && isAutoApplyEnabled()) {
-            try {
+        try {
+            if (editor && isAutoApplyEnabled()) {
                 const codeContext = contextAnalyzer.analyzeDocument(editor.document);
                 const instructions = instructionManager.getInstructionsForFile(editor.document.fileName);
                 
                 if (instructions.length > 0) {
                     await copilotIntegration.applyInstructionsToWorkspace(instructions);
                 }
-            } catch (error) {
-                console.error('Failed to auto-apply instructions:', error);
             }
+        } catch (error) {
+            console.error('[SDD] Failed to auto-apply instructions:', error);
+            // Don't rethrow - prevent extension crash
         }
     });
 
     // Listen for configuration changes
     const configChange = vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
-        if (event.affectsConfiguration('specDrivenDevelopment')) {
-            console.log('Spec Driven Development configuration changed');
+        try {
+            if (event.affectsConfiguration('specDrivenDevelopment')) {
+                console.log('[SDD] Configuration changed');
+            }
+        } catch (error) {
+            console.error('[SDD] Configuration change handler error:', error);
         }
     });
 
     // Listen for text document changes (for context analysis)
     const documentChange = vscode.workspace.onDidChangeTextDocument(async (event: vscode.TextDocumentChangeEvent) => {
-        if (event.document === vscode.window.activeTextEditor?.document) {
-            // Debounce context analysis for performance
-            clearTimeout((globalThis as any).vibeAnalysisTimeout);
-            (globalThis as any).vibeAnalysisTimeout = setTimeout(async () => {
-                try {
-                    const codeContext = contextAnalyzer.analyzeDocument(event.document);
-                    // Context analysis completed - UI providers removed for simplified panel
-                } catch (error) {
-                    console.error('Failed to analyze document changes:', error);
+        try {
+            if (event.document === vscode.window.activeTextEditor?.document) {
+                // Debounce context analysis for performance
+                if (vibeAnalysisTimeout) {
+                    clearTimeout(vibeAnalysisTimeout);
                 }
-            }, 1000); // 1 second debounce
+                vibeAnalysisTimeout = setTimeout(async () => {
+                    try {
+                        const codeContext = contextAnalyzer.analyzeDocument(event.document);
+                        // Context analysis completed - UI providers removed for simplified panel
+                    } catch (error) {
+                        console.error('[SDD] Failed to analyze document changes:', error);
+                    }
+                }, 1000); // 1 second debounce
+            }
+        } catch (error) {
+            console.error('[SDD] Document change handler error:', error);
         }
     });
 
@@ -1655,7 +1835,6 @@ function setupEventListeners(context: vscode.ExtensionContext) {
         documentChange
     );
 }
-
 function setupAutoApplyInstructions(context: vscode.ExtensionContext) {
     // Auto-apply instructions when files are opened
     if (isAutoApplyEnabled()) {
@@ -1668,9 +1847,10 @@ function setupAutoApplyInstructions(context: vscode.ExtensionContext) {
                         await copilotIntegration.applyInstructionsToWorkspace(instructions);
                     }
                 } catch (error) {
-                    console.error('Failed to auto-apply initial instructions:', error);
+                    console.error('[SDD] Failed to auto-apply initial instructions:', error);
+                    // Don't rethrow - prevent extension crash
                 }
-            }, 1000); // Delay to ensure everything is loaded
+            }, 2000); // Delay to ensure extension is fully loaded
         }
     }
 }
@@ -1710,24 +1890,45 @@ export async function handlePromptClick(prompt: any) {
 }
 
 export function deactivate() {
+    console.log('[SDD] Starting extension deactivation and cleanup...');
+    
+    // Clean up timeouts
+    if (vibeAnalysisTimeout) {
+        clearTimeout(vibeAnalysisTimeout);
+        vibeAnalysisTimeout = undefined;
+        console.log('[SDD] Cleared vibeAnalysisTimeout');
+    }
+    
+    // Dispose services
     if (copilotIntegration) {
         copilotIntegration.dispose();
+        console.log('[SDD] Disposed copilotIntegration');
     }
     if (resourceManager) {
         resourceManager.dispose();
+        console.log('[SDD] Disposed resourceManager');
     }
     if (awsService) {
         awsService.dispose();
+        console.log('[SDD] Disposed awsService');
     }
     if (estimationParser) {
         estimationParser.dispose();
+        console.log('[SDD] Disposed estimationParser');
     }
     if (jiraService) {
         jiraService.dispose();
+        console.log('[SDD] Disposed jiraService');
     }
     if (feedbackService) {
         feedbackService.dispose();
+        console.log('[SDD] Disposed feedbackService');
     }
+    if (notificationManager) {
+        notificationManager.dispose();
+        console.log('[SDD] Disposed notificationManager');
+    }
+    
     // taskService doesn't have a dispose method, so no cleanup needed
-    console.log('Spec Driven Development deactivated');
+    console.log('[SDD] Spec Driven Development deactivated and cleaned up successfully');
 }

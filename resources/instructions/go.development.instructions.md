@@ -1,9 +1,10 @@
 ---
 description: Comprehensive Go development standards, coding guidelines, project structure, and ready-to-use prompts for common development tasks.
-mode: standards
-model: 
-tools: ["copilot-chat", "inline-completion", "@workspace"]
-inputVariables: ["context-type", "service-requirements", "testing-scope", "team-standards"]
+applyTo:
+  - "**/*.go"
+  - "**/go.mod"
+  - "**/go.sum"
+  - "**/Dockerfile"
 ---
 
 # Go Development Standards & Guidelines

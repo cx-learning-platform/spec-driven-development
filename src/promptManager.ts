@@ -340,21 +340,28 @@ export class PromptManager {
     }
 
     public getPromptsByTrigger(trigger: string): Prompt[] {
-        return Array.from(this.prompts.values()).filter(prompt =>
-            prompt.triggers.includes(trigger)
-        );
+        return this.filterPrompts({ trigger });
     }
 
     public getPromptsByCategory(category: string): Prompt[] {
-        return Array.from(this.prompts.values()).filter(prompt =>
-            prompt.category === category
-        );
+        return this.filterPrompts({ category });
     }
 
     public getPromptsByLanguage(language: string): Prompt[] {
-        return Array.from(this.prompts.values()).filter(prompt =>
-            prompt.id.toLowerCase().includes(language.toLowerCase()) ||
-            prompt.content.toLowerCase().includes(language.toLowerCase())
+        return this.filterPrompts({ language });
+    }
+
+    public filterPrompts(criteria: {
+        trigger?: string;
+        category?: string;
+        language?: string;
+    }): Prompt[] {
+        return Array.from(this.prompts.values()).filter(prompt => 
+            (!criteria.trigger || prompt.triggers.includes(criteria.trigger)) &&
+            (!criteria.category || prompt.category === criteria.category) &&
+            (!criteria.language || 
+                prompt.id.toLowerCase().includes(criteria.language.toLowerCase()) ||
+                prompt.content.toLowerCase().includes(criteria.language.toLowerCase()))
         );
     }
 

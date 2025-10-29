@@ -46,13 +46,7 @@ export class ContextAnalyzer {
         /class\s+/g
     ];
 
-    public analyzeCurrentContext(): CodeContext {
-        const activeEditor = vscode.window.activeTextEditor;
-        if (!activeEditor) {
-            return this.getDefaultContext();
-        }
-
-        const document = activeEditor.document;
+    public analyzeDocument(document: vscode.TextDocument): CodeContext {
         const content = document.getText();
         const fileName = document.fileName;
         const fileExtension = path.extname(fileName);
@@ -79,25 +73,6 @@ export class ContextAnalyzer {
             needsLinting: this.needsFormatting(content),
             complexity: this.assessComplexity(content),
             technologies: technologies,
-            fileSize: content.length,
-            hasErrors: this.hasErrors(document)
-        };
-    }
-
-    public analyzeDocument(document: vscode.TextDocument): CodeContext {
-        const content = document.getText();
-        const fileName = document.fileName;
-        const fileExtension = path.extname(fileName);
-        const language = document.languageId;
-
-        return {
-            fileType: fileExtension,
-            language: language,
-            isReviewContext: this.isCodeReview(content, fileName),
-            hasSecrets: this.detectSecrets(content),
-            needsLinting: this.needsFormatting(content),
-            complexity: this.assessComplexity(content),
-            technologies: this.detectTechnologies(content, fileExtension, language),
             fileSize: content.length,
             hasErrors: this.hasErrors(document)
         };

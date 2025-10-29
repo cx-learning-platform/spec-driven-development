@@ -355,6 +355,21 @@
           "type": "string",
           "default": "",
           "description": "GitHub Personal Access Token for creating issues (requires 'repo' or 'public_repo' scope)"
+        },
+        "specDrivenDevelopment.enableDebugLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable detailed debug logging to help diagnose issues (useful for troubleshooting crashes)"
+        },
+        "specDrivenDevelopment.maxConcurrentRequests": {
+          "type": "number",
+          "default": 5,
+          "description": "Maximum number of concurrent API requests to prevent system overload"
+        },
+        "specDrivenDevelopment.maxFileScanLimit": {
+          "type": "number",
+          "default": 10000,
+          "description": "Maximum number of files to scan when analyzing workspace (prevents memory issues)"
         }
       }
     },
