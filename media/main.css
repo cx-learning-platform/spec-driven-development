@@ -74,6 +74,119 @@
     display: block;
 }
 
+/* Tab Header Styles for Import Button */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.section-header h3 {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.import-taskmaster-btn {
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border: 1px solid var(--vscode-button-border);
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.import-taskmaster-btn:hover {
+    background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.import-taskmaster-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Task Selection Section */
+.task-selection-section {
+    background-color: var(--vscode-textCodeBlock-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.task-selection-content label {
+    display: block;
+    font-size: 12px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--vscode-foreground);
+}
+
+.task-selection-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.task-dropdown {
+    flex: 1;
+    min-width: 150px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 3px;
+    padding: 6px 8px;
+    font-size: 12px;
+    min-height: 28px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.task-dropdown:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
+}
+
+.import-selected-btn {
+    background-color: var(--cisco-blue);
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+    font-weight: 500;
+    flex-shrink: 0;
+    min-width: fit-content;
+}
+
+.import-selected-btn:hover:not(:disabled) {
+    background-color: var(--cisco-blue-hover);
+}
+
+.import-selected-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+}
+
 /* Status Styles */
 .status-section {
     margin-bottom: 20px;
@@ -472,6 +585,16 @@
     color: var(--vscode-foreground);
     background-color: var(--vscode-editor-background);
     display: block;
+}
+
+.success-message {
+    padding: 12px;
+    border: 1px solid #4caf50;
+    border-radius: 6px;
+    background-color: var(--vscode-editor-background);
+    color: var(--vscode-foreground);
+    font-size: 14px;
+    margin: 10px 0;
 }
 
 .validation-result.error, .update-result.error, .feedback-result.error, .result-display.error {
@@ -1143,6 +1266,32 @@
 }
 
 /* Responsive adjustments */
+@media (max-width: 400px) {
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .import-taskmaster-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .task-selection-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .task-dropdown {
+        width: 100%;
+        min-width: 100%;
+    }
+
+    .import-selected-btn {
+        width: 100%;
+    }
+}
+
 @media (max-width: 300px) {
     .task-header {
         flex-direction: column;

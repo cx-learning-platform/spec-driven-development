@@ -11,8 +11,6 @@ export class CopilotIntegration {
     private static readonly WORKSPACE_VSCODE_DIR = '.spec-driven-files/.vscode';
     private static readonly WORKSPACE_HOWTO_DIR = '.spec-driven-files/how-to-guides';
     private outputChannel: vscode.OutputChannel;
-    private lastNotificationTime: number = 0;
-    private isManualCommand: boolean = false;
 
     constructor() {
         this.outputChannel = vscode.window.createOutputChannel('Spec Driven Development');
@@ -608,23 +606,57 @@ export class CopilotIntegration {
     private async getAllFilesRecursive(dirPath: string): Promise<string[]> {
         const fs = require('fs');
         const files: string[] = [];
+        const MAX_FILES = 10000; // Prevent memory exhaustion
+        const MAX_DEPTH = 20; // Prevent infinite recursion
         
-        function scanDirectory(currentPath: string) {
-            const items = fs.readdirSync(currentPath);
+        function scanDirectory(currentPath: string, depth: number = 0) {
+            // Safety checks to prevent crashes
+            if (depth > MAX_DEPTH || files.length >= MAX_FILES) {
+                console.warn(`[SDD] Stopping directory scan: depth=${depth}, files=${files.length}`);
+                return;
+            }
             
-            for (const item of items) {
-                const itemPath = path.join(currentPath, item);
-                const stat = fs.statSync(itemPath);
+            try {
+                const items = fs.readdirSync(currentPath);
                 
-                if (stat.isDirectory()) {
-                    scanDirectory(itemPath);
-                } else {
-                    files.push(itemPath);
+                for (const item of items) {
+                    // Skip large/problematic directories
+                    if (item === 'node_modules' || item === '.git' || item === 'out' || 
+                        item === 'dist' || item === 'build' || item === '.vscode' ||
+                        item === 'target' || item === 'vendor' || item === '__pycache__') {
+                        continue;
+                    }
+                    
+                    // Check if we've hit the file limit
+                    if (files.length >= MAX_FILES) {
+                        console.warn(`[SDD] Reached max file limit (${MAX_FILES})`);
+                        return;
+                    }
+                    
+                    const itemPath = path.join(currentPath, item);
+                    
+                    try {
+                        const stat = fs.statSync(itemPath);
+                        
+                        if (stat.isDirectory()) {
+                            scanDirectory(itemPath, depth + 1);
+                        } else {
+                            files.push(itemPath);
+                        }
+                    } catch (statError) {
+                        // Handle permission errors or broken symlinks
+                        console.warn(`[SDD] Error accessing ${itemPath}:`, statError);
+                        // Continue with other files
+                    }
                 }
+            } catch (readError) {
+                console.error(`[SDD] Error reading directory ${currentPath}:`, readError);
+                // Don't throw, just log and continue
             }
         }
         
         scanDirectory(dirPath);
+        console.log(`[SDD] Scanned ${files.length} files (max: ${MAX_FILES}, max depth: ${MAX_DEPTH})`);
         return files;
     }
 
@@ -956,27 +988,8 @@ export class CopilotIntegration {
     }
 
     private shouldShowNotification(): boolean {
-        // Only show notifications for manual commands or if enough time has passed
-        const now = Date.now();
-        const timeDiff = now - this.lastNotificationTime;
-        const minInterval = 30000; // 30 seconds minimum between automatic notifications
-        
-        if (this.isManualCommand) {
-            this.lastNotificationTime = now;
-            this.isManualCommand = false; // Reset flag
-            return true;
-        }
-        
-        if (timeDiff > minInterval) {
-            this.lastNotificationTime = now;
-            return false; // Don't show automatic notifications
-        }
-        
-        return false;
-    }
-
-    public setManualCommand(): void {
-        this.isManualCommand = true;
+        const config = vscode.workspace.getConfiguration('specDrivenDevelopment');
+        return config.get('showNotifications', true);
     }
 
     private async openInstructionsFolder(): Promise<void> {
@@ -1163,6 +1176,9 @@ export class CopilotIntegration {
     }
 
     public dispose(): void {
-        this.outputChannel.dispose();
+        console.log('[SDD] Disposing CopilotIntegration');
+        if (this.outputChannel) {
+            this.outputChannel.dispose();
+        }
     }
 }

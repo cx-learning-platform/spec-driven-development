@@ -75,27 +75,6 @@ export class EstimationParser {
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
-        this.setupEventListeners();
-    }
-
-    private setupEventListeners() {
-        // Check if automatic document parsing is enabled (disabled by default to prevent unwanted notifications)
-        const autoParsingEnabled = vscode.workspace.getConfiguration('specDrivenDevelopment').get('enableAutoDocumentParsing', false);
-        
-        if (autoParsingEnabled) {
-            // Listen for GitHub Copilot chat responses
-            // Note: This is a placeholder - actual implementation would depend on Copilot API
-            vscode.workspace.onDidChangeTextDocument((event) => {
-                if (this.isCopilotDocument(event.document)) {
-                    this.parseDocumentForEstimations(event.document);
-                }
-            });
-        } else {
-            console.log('Spec Driven Development: Automatic document parsing disabled to prevent unwanted notifications. Enable in settings if needed.');
-        }
-
-        // Listen for chat panel changes if available
-        // This would be implemented when Copilot chat API is available
     }
 
     private isCopilotDocument(document: vscode.TextDocument): boolean {

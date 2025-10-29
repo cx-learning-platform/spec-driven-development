@@ -7,11 +7,9 @@
 
 ## 🚀 What Does This Extension Do?
 
-**Spec Driven Development** is a comprehensive VS Code extension that combines intelligent development resources with enterprise-grade Feature and project management capabilities.
+**Spec Driven Development** is a comprehensive VS Code extension that combines intelligent development resources with enterprise-grade task management and project integration capabilities.
 
 ## 🎯 Core Features
-
-The extension provides three main capabilities:
 
 ### 📚 **Development Resources & Guidelines**
 - **Intelligent Context Analysis** - Automatically detects your project's technologies and frameworks
@@ -19,17 +17,98 @@ The extension provides three main capabilities:
 - **Smart Development Prompts** - Contextual prompts for code review, estimation, security scanning, and linting
 - **Workspace Guidelines** - Automatically adds development resources to your workspace
 
-### � **Enterprise Integration**
+### 🏢 **Enterprise Integration**
 - **AWS Integration** - Secure credential management using your AWS CLI configuration
-- **Salesforce Feature System** - Direct integration with Salesforce for feature submission
-- **JIRA Task Management** - Update and track JIRA tasks with effort estimation
+- **Salesforce Task System** - Direct integration with Salesforce for task submission and tracking
+- **JIRA Task Management** - Complete task lifecycle from creation to completion
 - **Initiative & Epic Management** - Smart filtering and relationship-based dropdowns
+- **Git-Based Auto-Population** - Automatically detects repository and populates Initiative/Epic fields
+- **Enhanced Error Handling** - Detailed Salesforce API error messages with actionable information
 
-### 🎯 **Project Management**
-- **Feature History Tracking** - Complete audit trail of submitted feature
-- **Real-time Status Monitoring** - Live connection status for AWS and Salesforce
-- **Enhanced Error Reporting** - Detailed Salesforce API error messages with specific error codes for faster troubleshooting
-- **Enterprise-grade Logging** - Comprehensive error reporting and diagnostics
+### 🎯 **Task Management**
+- **WIP Tasks** - Work-in-progress task tracking with edit, delete, and completion actions
+- **Running Tasks** - View and monitor active tasks with real-time updates
+- **Done Tasks** - Completed task management with restore functionality
+- **TaskMaster Import** - Import tasks from JSON files with duplicate detection
+- **Task Search & Filtering** - Find tasks by ID, name, or description across all categories
+- **Pagination Support** - Navigate through large task lists with configurable page sizes
+- **Real-Time Status Updates** - Live task counts and status synchronization
+
+---
+
+## ⚙️ Configuration & Setup
+
+### 🎯 **Quick Start** (No Configuration Required)
+1. Install the extension from VS Code Marketplace
+2. Click the "Spec Driven Development" status bar item to open the panel
+3. Use "Import from TaskMaster" to start managing tasks immediately
+4. Access development resources via context menu commands
+
+### 🏢 **Enterprise Integration Setup** (Optional)
+
+#### **VS Code Settings**
+```json
+{
+  "specDrivenDevelopment.awsProfile": "",
+  "specDrivenDevelopment.awsRegion": "",
+  "specDrivenDevelopment.salesforceSecretName": "salesforce"
+}
+```
+
+#### **AWS Prerequisites**
+1. **AWS CLI configured**: `aws configure`
+2. **IAM permissions for Secrets Manager**:
+   ```json
+   {
+     "Effect": "Allow",
+     "Action": ["secretsmanager:GetSecretValue", "secretsmanager:ListSecrets"],
+     "Resource": "*"
+   }
+   ```
+
+#### **Salesforce Credentials in AWS Secrets Manager**
+```json
+{
+  "username": "your-salesforce-username",
+  "password": "your-salesforce-password",
+  "client_id": "your-connected-app-client-id",
+  "client_secret": "your-connected-app-client-secret"
+}
+```
+
+### 📁 **Generated Project Structure**
+
+When you use "Add Workspace Guidelines", the extension creates:
+```
+your-project/
+├── .spec-driven-files/
+│   ├── instructions/          # 📚 Contextual Coding Instructions
+│   │   ├── go.best-practices.instructions.md
+│   │   ├── go.development.instructions.md
+│   │   ├── go.design-architecture.instructions.md
+│   │   ├── go.otel-observability-logging-metrics.instructions.md
+│   │   ├── go.power-user-guide.instructions.md
+│   │   ├── python.instructions.md
+│   │   ├── terraform.instructions.md
+│   │   ├── bash.instructions.md
+│   │   └── software.requirements.instructions.md
+│   ├── prompts/               # 🎯 Smart Development Prompts
+│   │   ├── go.review.prompt.md
+│   │   ├── software.effort.estimation.prompt.md
+│   │   ├── secrets-detection.prompt.md
+│   │   ├── linting.prompt.md
+│   │   └── jenkins.estimation.prompt.md
+│   ├── how-to-guides/         # 📖 Development Workflow Guides
+│   │   ├── vibe-workflow.md
+│   │   ├── vs-copilot-how-to-instructions.md
+│   │   ├── vs-copilot-how-to-mcp-server.md
+│   │   └── vs-copilot-how-to-prompts.md
+│   └── .vscode/               # ⚙️ VS Code Workspace Settings
+│       └── mcp.json           # MCP server configurations
+└── your-existing-code/        # Your project files remain unchanged
+```
+
+**Note**: The extension adds resources to your workspace but never modifies your existing code files.
 
 ---
 
@@ -38,19 +117,24 @@ The extension provides three main capabilities:
 ### 1. **Install the Extension**
 Install from the VS Code Marketplace or use the Command Palette (`Ctrl+Shift+P` → "Extensions: Install Extensions")
 
-### 2. **Development Resources** (Works Immediately)
-- Right-click any folder → "Add Workspace Guidelines"
-- Use "Analyze Code & Apply Instructions" command
-- Access comprehensive language-specific best practices
-
-### 3. **Access the Panel**
+### 2. **Access the Panel**
 - Click the "Spec Driven Development" status bar item, or
 - Use Command Palette: "Spec Driven Development: Open Panel"
+
+### 3. **Task Management** (Core Feature)
+- **My Task List Tab**: View and manage tasks across three categories:
+  - **WIP Tickets**: Work-in-progress tasks with Edit, Delete, Done actions
+  - **Tickets List**: All Tickets with View option
+  - **Done Tickets**: Completed tasks with View options
+- **Import Tasks**: Use "Import from TaskMaster" to load tasks from JSON files
+- **Search & Filter**: Find tasks by ID, name, or description across all categories
+- **Pagination**: Navigate large task lists with Previous/Next controls
 
 ### 4. **Enterprise Features** (Optional Setup)
 - **Configurations Tab**: Ensure AWS CLI is configured with Secrets Manager access
 - **Salesforce Integration**: Store Salesforce credentials in AWS Secrets Manager
 - **Connect**: Use the Configurations tab to establish connections
+- **Auto-Population**: Click "Auto-Populate from Git" to automatically detect and populate Initiative/Epic fields based on your workspace repository
 
 ---
 
@@ -68,11 +152,14 @@ Install from the VS Code Marketplace or use the Command Palette (`Ctrl+Shift+P` 
 ### 🏢 **Enterprise Commands**
 | Command | Description |
 |---------|-------------|
-| **Open Panel** | Access the main management interface |
+| **Open Panel** | Access the main management interface with task management |
 | **Connect to AWS** | Establish AWS Secrets Manager connection |
-| **Submit Feature** | Submit Feature to Salesforce with JIRA integration |
-| **Update JIRA Issue** | Update JIRA tasks with effort estimation |
-| **Parse Copilot Estimation** | Extract effort estimates from GitHub Copilot Chat |
+| **Submit Feature** | Submit features to Salesforce with JIRA integration |
+| **Auto-Populate from Git** | Automatically detect repository and populate Initiative/Epic fields |
+| **Import from TaskMaster** | Import tasks from JSON files with duplicate detection |
+| **Task Actions** | Edit, Delete, Complete (Done), View, and Restore tasks |
+| **Search Tasks** | Find tasks across WIP, Running, and Done categories |
+| **Paginate Tasks** | Navigate through large task lists with Previous/Next controls |
 
 ### 📚 **Development Resources Created**
 
@@ -120,103 +207,12 @@ When you use "Add Workspace Guidelines", the extension creates:
 
 ### 🏢 **Enterprise Integration**
 - **AWS Secrets Manager** - Secure credential management using your AWS CLI configuration
-- **Salesforce API Integration** - Direct REST API connectivity with dynamic field discovery
+- **Salesforce API Integration** - Direct REST API connectivity with dynamic field discovery and enhanced error reporting
+- **Git Service Integration** - Automatic repository detection from VS Code Git extension
+- **Smart Auto-Population** - Chain Git → Application → Initiative → Epic for intelligent form filling
 - **JIRA Task Management** - Update tasks with effort estimation and status tracking
 - **Feature Workflow** - Complete feature lifecycle from submission to tracking
-
----
-
-## ⚙️ Configuration & Setup
-
-### 🎯 **Basic Usage** (No Configuration Required)
-The extension works immediately for development features:
-- Language-specific instructions
-- Smart prompts and code analysis
-- Workspace resource management
-- Contextual development guidance
-
-### 🏢 **Enterprise Integration Setup** (Optional)
-
-For AWS and Salesforce features, configure the following:
-
-#### **VS Code Settings**
-```json
-{
-  "specDrivenDevelopment.awsProfile": "",        // AWS CLI profile (empty = default)
-  "specDrivenDevelopment.awsRegion": "",         // AWS region (empty = auto-detect)
-  "specDrivenDevelopment.salesforceSecretName": "salesforce",
-  "specDrivenDevelopment.salesforceSecretKeywords": ["salesforce", "sf", "crm"]
-}
-```
-
-#### **AWS Prerequisites**
-1. **AWS CLI installed and configured**
-   ```bash
-   aws configure
-   # or use: aws configure --profile your-profile-name
-   ```
-
-2. **IAM permissions for Secrets Manager**
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [
-       {
-         "Effect": "Allow",
-         "Action": [
-           "secretsmanager:GetSecretValue",
-           "secretsmanager:ListSecrets"
-         ],
-         "Resource": "*"
-       }
-     ]
-   }
-   ```
-
-#### **Salesforce Credentials in AWS Secrets Manager**
-Store your Salesforce credentials as a JSON secret:
-```json
-{
-  "username": "your-salesforce-username",
-  "password": "your-salesforce-password",
-  "client_id": "your-connected-app-client-id",
-  "client_secret": "your-connected-app-client-secret"
-}
-```
-
-### 📁 **Generated Project Structure**
-
-When you use "Add Workspace Guidelines", the extension creates:
-```
-your-project/
-├── .spec-driven-files/
-│   ├── instructions/          # 📚 Contextual Coding Instructions
-│   │   ├── go.best-practices.instructions.md
-│   │   ├── go.development.instructions.md
-│   │   ├── go.design-architecture.instructions.md
-│   │   ├── go.otel-observability-logging-metrics.instructions.md
-│   │   ├── go.power-user-guide.instructions.md
-│   │   ├── python.instructions.md
-│   │   ├── terraform.instructions.md
-│   │   ├── bash.instructions.md
-│   │   └── software.requirements.instructions.md
-│   ├── prompts/               # 🎯 Smart Development Prompts
-│   │   ├── go.review.prompt.md
-│   │   ├── software.effort.estimation.prompt.md
-│   │   ├── secrets-detection.prompt.md
-│   │   ├── linting.prompt.md
-│   │   └── jenkins.estimation.prompt.md
-│   ├── how-to-guides/         # 📖 Development Workflow Guides
-│   │   └── vibe-workflow.md
-│   │   └── vs-copilot-how-to-instructions.md
-│   │   └── vs-copilot-how-to-mcp-server.md
-│   │   └── vs-copilot-how-to-prompts.md
-│   └── .vscode/                   # ⚙️ VS Code Workspace Settings
-│       └──  mcp.json              # MCP server configurations
-└── your-existing-code/        # Your project files remain unchanged
-```
-
-**Note**: The extension adds resources to your workspace but never modifies your existing code files.
+- **Enhanced Error Messages** - Detailed Salesforce error codes with actionable information (e.g., STORAGE_LIMIT_EXCEEDED)
 
 ---
 
@@ -239,13 +235,47 @@ Output: Structured time estimates with configurable work hours
 - Total: 40-56 hours
 ```
 
-### **🔧 Enterprise Workflow**
+### 🔧 **Task Management Workflow**
 ```text
-1. Developer gets task: "EPIC-DEVSECOPS-123: Implement user authentication"
-2. Use "Add Workspace Guidelines" → Gets Go best practices, security guidelines
-3. Code with enhanced context and instructions
-4. Use "Edit" button in WIP Tickets sub-panel → Automatically update Salesforce data
-5. Click "Done" → Complete feature loop with initiative/epic tracking
+1. Import tasks: Use "Import from TaskMaster" with JSON file
+2. Work with WIP tasks: Edit details, estimate hours, track progress
+3. Complete tasks: Click "Done" to move from WIP to Done status
+4. Monitor progress: Use search to find specific tasks across categories
+5. Navigate pages: Use Previous/Next buttons for large task lists
+6. Restore if needed: Move completed tasks back to active status
+7. Enterprise sync: Tasks integrate with Salesforce and JIRA systems
+```
+
+### 🎯 **Git-Based Auto-Population Workflow**
+```text
+1. Open workspace with a Git repository
+2. Navigate to "Manage Features" tab
+3. Click "Auto-Populate from Git" button
+4. Extension automatically:
+   - Detects repository name from Git remote URL
+   - Queries Salesforce for matching Application
+   - Loads related Initiatives from the Application
+   - Filters Epics based on Initiative's Jira Team
+   - Pre-populates Initiative and Epic dropdowns
+5. Select from pre-filtered options or manually choose
+6. Complete remaining form fields and submit
+```
+
+### **📁 TaskMaster JSON Format**
+```json
+[
+  {
+    "id": 1,
+    "title": "Implement User Authentication",
+    "description": "Add secure login functionality",
+    "status": "",
+    "priority": "Major-P3",
+    "type": "story",
+    "workType": "RTB",
+    "estimation": "16",
+    "acceptanceCriteria": "Users can securely log in and out"
+  }
+]
 ```
 
 ### **🔍 Smart Context Detection**
@@ -270,18 +300,40 @@ When working with different technologies, the extension provides targeted guidan
 - **Bash scripts** → Security practices, error handling, portability
 - **Mixed projects** → Relevant instructions for all detected languages
 
-## 🧠 Smart Detection & Intelligence
+## 🎯 Extension Interface
 
-### 🔍 **Automatic Technology Detection**
+The extension provides a three-tab interface:
 
-| Category | Technologies Detected | Resources Provided |
-|----------|----------------------|-------------------|
-| **Languages** | Go, Python, JavaScript, TypeScript, Bash, Terraform | Language-specific instruction files and best practices |
-| **Go Frameworks** | Gin, Echo, Fiber, gRPC, OTEL | Web framework patterns and observability guidelines |
-| **Python Frameworks** | Django, Flask, FastAPI, pytest | Framework-specific development patterns |
-| **Infrastructure** | AWS, Azure, GCP, Docker, Kubernetes | Cloud-specific Terraform practices and container guidelines |
-| **Databases** | PostgreSQL, MongoDB, Redis | Database integration and query optimization patterns |
-| **CI/CD** | Jenkins, GitHub Actions, GitLab CI | Pipeline optimization and estimation guides |
+### 📋 **Configurations Tab**
+- **AWS Connection Status** - Real-time connection monitoring with visual indicators
+- **Secret Validation** - Automatic Salesforce credential verification
+- **Connection Management** - Connect, refresh, and troubleshoot AWS integration
+- **Error Details** - Enhanced error messages showing specific Salesforce API error codes and descriptions
+
+### 🎯 **Manage Features Tab**
+- **Feature Creation** - Submit new features to Salesforce with comprehensive field validation
+- **Git-Based Auto-Population** - Automatically detect repository and populate Initiative/Epic fields
+- **TaskMaster Import** - Import tasks from JSON files with duplicate detection
+- **Initiative & Epic Management** - Smart filtering with relationship-based dropdowns
+- **Sprint Details** - Dynamically loaded sprint options with recommended selections
+- **Validation & Feedback** - Real-time form validation with detailed error messages
+- **Duplicate Detection** - Prevents duplicate TaskMaster submissions
+
+### 📊 **My Task List Tab**
+- **Task Categories**:
+  - **WIP Tickets** - Active work with Edit, Delete, Done actions and full field editing
+  - **Tickets List** - Running tasks with View capability showing all task details
+  - **Done Tickets** - Completed tasks with View and Restore options
+- **Advanced Search** - Find tasks by ticket ID, name, or description across all fields
+- **Pagination Controls** - Navigate through large task lists with Previous/Next buttons
+- **Configurable Page Size** - Adjust number of tasks displayed per page (default: 20)
+- **Real-time Updates** - Live task status, count updates, and synchronization
+- **Task Actions**:
+  - **Edit**: Modify all task fields including description, hours, dates, and criteria
+  - **Delete**: Remove tasks with confirmation (WIP tasks only)
+  - **Done**: Mark tasks complete and move to Done category
+  - **View**: Display full task details in modal
+  - **Restore**: Move completed tasks back to WIP status
 ---
 
 ## 🏗️ Extension Architecture
@@ -297,10 +349,14 @@ Built with TypeScript and VS Code Extension API:
 - **`src/copilotIntegration.ts`** - GitHub Copilot enhancement integration
 
 ### 🔧 **Service Layer**
-- **`src/services/awsService.ts`** - AWS Secrets Manager integration
-- **`src/services/jiraService.ts`** - Salesforce/JIRA ticket management  
-- **`src/services/FeatureService.ts`** - Salesforce/JIRA Feature system
+- **`src/services/awsService.ts`** - AWS Secrets Manager integration with secure credential handling
+- **`src/services/jiraService.ts`** - Salesforce/JIRA ticket management and authentication
+- **`src/services/feedbackService.ts`** - Salesforce API integration with auto-population logic
+- **`src/services/taskService.ts`** - Complete task lifecycle management (WIP, Running, Done)
+- **`src/services/gitService.ts`** - Git repository detection using VS Code Git extension API
 - **`src/services/estimationParser.ts`** - Intelligent effort estimation parsing
+- **`src/services/notificationManager.ts`** - Consolidated notification system with progress indicators
+- **`src/services/taskMasterService.ts`** - TaskMaster JSON import with duplicate detection
 
 ### 🎨 **User Interface**
 - **`src/ui/webviewPanel.ts`** - Main extension panel and UI
@@ -310,84 +366,34 @@ Built with TypeScript and VS Code Extension API:
 
 ---
 
-##  Troubleshooting & FAQ
+## 🛠️ Troubleshooting
 
-### ❓ **Common Issues & Solutions**
+### ❓ **Common Issues**
 
 | Issue | Solution |
 |-------|----------|
 | Extension not loading | Check VS Code version (requires 1.74.0+), restart VS Code |
-| AWS authentication failed | Verify `aws configure` is set up and test with `aws sts get-caller-identity` |
-| Salesforce integration errors | Check AWS Secrets Manager permissions and secret format |
-| "Add Workspace Guidelines" not working | Try right-clicking on a folder instead of a file |
+| AWS authentication failed | Verify `aws configure` and test with `aws sts get-caller-identity` |
+| Task import conflicts | Tasks with duplicate IDs - delete existing tasks or use different IDs |
+| Salesforce integration errors | Check AWS Secrets Manager permissions and secret format. Review detailed error messages in panel |
+| Auto-populate not working | Ensure workspace has Git repository with remote configured. Check Output panel for Git detection logs |
+| Storage limit exceeded | Salesforce error indicating data storage limits reached. Contact Salesforce admin to increase storage quota |
 | Webview panel not displaying | Restart VS Code, check for extension conflicts |
+| Git repository not detected | Initialize Git repo with `git init` and add remote with `git remote add origin <url>` |
 
 ### 🔍 **Debug Information**
-
-**Check Extension Logs:**
 1. Open VS Code Output panel (`View > Output`)
 2. Select "Spec Driven Development" from dropdown
-3. Look for error messages and warnings
+3. Check for error messages and warnings
 
-**Common Log Messages:**
-- `AWS authentication failed` - Run `Configurations` to set up credentials
-- `Salesforce credentials not available` - Check AWS Secrets Manager secret format
-- `No active editor found` - Use context menu on folders/files instead
-
-### 🛠️ **Manual Diagnostics**
-
+### 🚀 **Development Setup**
 ```bash
-# Test AWS CLI configuration
-aws sts get-caller-identity
-
-# List available secrets (requires permissions)
-aws secretsmanager list-secrets
-
-# Test specific secret access
-aws secretsmanager get-secret-value --secret-id "salesforce"
-```
-
-### 🚀 **Development Setup** (For Contributors)
-
-```bash
-# Clone and setup
-git clone https://github.com/Relanto-LKM-POC/spec-driven-development.git
+git clone <your-git-repo-link>
 cd spec-driven-development
-
-# Install dependencies
 npm install
-
-# Compile TypeScript
 npm run compile
-
-# Development mode (auto-recompile)
-npm run watch
-
-# Test in Extension Development Host
 # Press F5 in VS Code to launch test instance
 ```
-
----
-
-## 🛡️ Security & Privacy
-
-### 🔒 **Security Model**
-- **Local Processing** - All code analysis and resource generation happens locally
-- **Secure Credential Management** - Uses AWS Secrets Manager, no local credential storage
-- **No Telemetry** - Extension doesn't collect or transmit usage data
-- **Open Source** - Full transparency in all functionality
-
-### 📊 **Data Handling**
-- **Development Resources** - Created locally in your workspace
-- **AWS Integration** - Credentials managed through your existing AWS CLI configuration  
-- **Salesforce Integration** - Credentials retrieved from AWS Secrets Manager only
-- **No External Dependencies** - Core features work without internet connectivity
-
-### ⚠️ **Security Best Practices**
-- Use minimal AWS IAM permissions for Secrets Manager access
-- Regularly rotate Salesforce credentials and update secrets
-- Review generated resources before committing to version control
-- Use environment-specific Salesforce orgs (dev/staging/prod)
 
 ---
 
@@ -396,58 +402,36 @@ npm run watch
 ### 📦 **Package Details**
 - **Extension ID**: `spec-driven-development`
 - **Publisher**: Gen-Ai-publisher
-- **Version**: 1.0.1
+- **Version**: 1.0.0
 - **License**: MIT
 - **VS Code Compatibility**: 1.74.0+
-- **Languages Supported**: Go, Python, Terraform, Bash, JavaScript, TypeScript
 
-### ✨ **Feature Summary**
-- ✅ **9 Language-Specific Instruction Sets** - Comprehensive best practices
-- ✅ **5 Smart Development Prompts** - Context-aware development guidance
+### ✨ **Key Features**
+- ✅ **Task Management System** - Complete WIP to Done workflow with pagination
+- ✅ **Git-Based Auto-Population** - Automatic repository detection and form filling
+- ✅ **TaskMaster JSON Import** - Import tasks with duplicate detection
+- ✅ **Advanced Search & Filter** - Find tasks across all categories with real-time results
 - ✅ **AWS Secrets Manager Integration** - Enterprise credential management
-- ✅ **Salesforce API Integration** - Direct feature and task management
-- ✅ **Intelligent Effort Estimation** - Multiple format parsing support
+- ✅ **Salesforce API Integration** - Direct task and feature management with enhanced error reporting
+- ✅ **GitService Integration** - Repository detection via VS Code Git extension
+- ✅ **NotificationManager** - Consolidated progress and status notifications
+- ✅ **Development Resources** - Language-specific best practices
 - ✅ **Multi-Platform Support** - Windows, macOS, and Linux compatible
 
----
-
-## 📝 License & Information
-
-### 📄 License
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-### �️ Built With
-- **TypeScript** - Main development language
-- **VS Code Extension API** - Core extension framework
-- **Node.js** - Runtime environment
-- **AWS SDK** - Cloud services integration
-- **Webpack** - Bundle optimization
-
-### � Dependencies
-```json
-{
-  "@types/vscode": "^1.74.0",
-  "node-fetch": "For HTTP requests",
-  "aws-sdk": "For AWS Secrets Manager integration"
-}
-```
-
-### 📋 Requirements
-- **VS Code**: Version 1.74.0 or higher
-- **Node.js**: For extension runtime
-- **AWS CLI**: For AWS integration (optional)
-- **Git**: For GitHub integration (optional)
+### 🔗 **Quick Links**
+- **Repository**: [GitHub](https://github.com/Relanto-LKM-POC/spec-driven-development)
+- **Issues**: [Report Issues](https://github.com/Relanto-LKM-POC/spec-driven-development/issues)
+- **License**: [MIT License](LICENSE)
 
 ---
 
 <div align="center">
 
-**🎯 Spec Driven Development** • **Intelligent Development Enhancement**
+**🎯 Spec Driven Development** • **Intelligent Task Management & Development Enhancement**
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.74.0+-007ACC.svg)](https://code.visualstudio.com/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-4.9+-blue.svg)](https://www.typescriptlang.org/)
 
-**Enhance your development workflow with intelligent context analysis and comprehensive resources.** 🚀
+**Streamline your development workflow with intelligent task management and enterprise integration.** 🚀
 
 </div>

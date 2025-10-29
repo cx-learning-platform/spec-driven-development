@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AWSService } from './awsService';
 import { EstimationData } from './estimationParser';
+import { CONFIG, getSalesforceAuthUrl, getSalesforceApiUrl } from '../config/config';
 
 // Dynamic import for node-fetch to handle ES modules in CommonJS environment
 let fetch: any;
@@ -37,6 +38,7 @@ export interface SalesforceTicketMatch {
     Name: string;
     Epic__c: string;
     Jira_Link__c: string;
+    Status__c?: string;
 }
 
 export interface SalesforceQueryResponse {
@@ -95,7 +97,6 @@ export class JiraService {
                 ? salesforceCredentials.password
                 : salesforceCredentials.password + salesforceCredentials.security_token;
 
-            const authUrl = 'https://test.salesforce.com/services/oauth2/token';
             const authParams = new URLSearchParams({
                 grant_type: 'password',
                 client_id: salesforceCredentials.client_id,
@@ -104,7 +105,7 @@ export class JiraService {
                 password: fullPassword
             });
 
-            const response = await fetch(authUrl, {
+            const response = await fetch(getSalesforceAuthUrl(), {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -139,10 +140,11 @@ export class JiraService {
 
             const authData = await response.json() as SalesforceAuthResponse;
             
-            // Cache the token for 1 hour (Salesforce tokens typically last 2 hours)
+            // Cache the token for 30 minutes (conservative based on observed 30-minute expiry)
             this.cachedAuthToken = authData.access_token;
-            this.tokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+            this.tokenExpiry = new Date(Date.now() + CONFIG.cache.tokenTTL); // 30 minutes from now
 
+            console.log(`Salesforce authentication successful, token cached for ${CONFIG.cache.tokenTTL / (60 * 1000)} minutes`);
             return authData.access_token;
 
         } catch (error) {
@@ -152,13 +154,12 @@ export class JiraService {
     }
 
     /**
-     * Step 2: Match EPIC-DEVSECOPS ticket to get Epic ID
+     * Step 2: Match JIRA ticket to get Epic ID
      */
-    private async matchEpicTicket(accessToken: string, devsecopsId: string): Promise<SalesforceTicketMatch> {
+    private async matchEpicTicket(accessToken: string, jiraId: string): Promise<SalesforceTicketMatch> {
         try {
-            const baseUrl = 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com';
-            const query = `SELECT+Id%2CName%2CEpic__c%2CJira_Link__c+FROM+Feedback__c+WHERE+Jira_Link__c+LIKE+%27%25${devsecopsId}%25%27`;
-            const queryUrl = `${baseUrl}/services/data/v56.0/query/?q=${query}`;
+            const query = `SELECT+Id%2CName%2CEpic__c%2CJira_Link__c%2CStatus__c+FROM+Feedback__c+WHERE+Jira_Link__c+LIKE+%27%25${jiraId}%25%27`;
+            const queryUrl = getSalesforceApiUrl(`${CONFIG.api.endpoints.query}/?q=${query}`);
 
             const response = await fetch(queryUrl, {
                 method: 'GET',
@@ -176,7 +177,7 @@ export class JiraService {
             const queryData = await response.json() as SalesforceQueryResponse;
 
             if (queryData.totalSize === 0 || !queryData.records || queryData.records.length === 0) {
-                throw new Error(`No matching ticket found for DEVSECOPS ID: ${devsecopsId}`);
+                throw new Error(`No matching ticket found for JIRA ID: ${jiraId}`);
             }
 
             return queryData.records[0];
@@ -197,8 +198,7 @@ export class JiraService {
         estimatedHours: number
     ): Promise<void> {
         try {
-            const baseUrl = 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com';
-            const updateUrl = `${baseUrl}/services/data/v56.0/sobjects/Feedback__c/${recordId}`;
+            const updateUrl = getSalesforceApiUrl(`${CONFIG.api.endpoints.feedback}/${recordId}`);
 
             const updateData = {
                 Estimated_Effort_Hours__c: estimatedHours,
@@ -226,13 +226,13 @@ export class JiraService {
         }
     }
 
-    public async validateJiraIssue(jiraId: string): Promise<{isValid: boolean; error?: string}> {
+    public async validateJiraIssue(jiraId: string): Promise<{isValid: boolean; error?: string; status?: string}> {
         try {
-            // Basic format validation for DEVSECOPS tickets
-            if (!jiraId.match(/^DEVSECOPS-\d+$/)) {
+            // Basic format validation for JIRA tickets (supports any project key format including alphanumeric)
+            if (!jiraId.match(CONFIG.jira.ticketIdPattern)) {
                 return {
                     isValid: false,
-                    error: 'Invalid format. Expected: DEVSECOPS-XXXX'
+                    error: 'Invalid format. Expected: PROJECT-XXXX (e.g., DEVSECOPS-1234, GAI-567, ABC123-999)'
                 };
             }
 
@@ -242,7 +242,8 @@ export class JiraService {
                 const ticketMatch = await this.matchEpicTicket(accessToken, jiraId);
                 
                 return {
-                    isValid: true
+                    isValid: true,
+                    status: ticketMatch.Status__c || 'Unknown'
                 };
             } catch (error) {
                 return {
@@ -265,8 +266,8 @@ export class JiraService {
     public async updateJiraIssue(request: JiraUpdateRequest): Promise<JiraUpdateResult> {
         try {
             // Validate inputs
-            if (!request.jiraId || !request.jiraId.match(/^DEVSECOPS-\d+$/)) {
-                throw new Error('Invalid JIRA ID format. Expected format: DEVSECOPS-XXXX');
+            if (!request.jiraId || !request.jiraId.match(CONFIG.jira.ticketIdPattern)) {
+                throw new Error('Invalid JIRA ID format. Expected format: PROJECT-XXXX (e.g., DEVSECOPS-1234, GAI-567, ABC123-999)');
             }
 
             // Use manual hours if provided, otherwise use estimation data
