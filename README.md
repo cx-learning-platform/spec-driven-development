@@ -386,9 +386,15 @@ Built with TypeScript and VS Code Extension API:
 2. Select "Spec Driven Development" from dropdown
 3. Check for error messages and warnings
 
-### 🚀 **Development Setup**
+## Pre Requisites:
+```
+Node >= v23.10.0
+npm  >= 10.9.2
+```
+
 ```bash
-git clone <your-git-repo-link>
+# Clone and setup
+git clone git@github.com:cx-learning-platform/spec-driven-development.git
 cd spec-driven-development
 npm install
 npm run compile
