@@ -38,6 +38,9 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                     case 'refreshAWSConnection':
                         vscode.commands.executeCommand('specDrivenDevelopment.refreshAWSConnection');
                         break;
+                    case 'disconnectAWS':
+                        vscode.commands.executeCommand('specDrivenDevelopment.disconnectAWS');
+                        break;
                     case 'updateJiraIssue':
                         vscode.commands.executeCommand('specDrivenDevelopment.updateJiraIssue', message.data);
                         break;
@@ -67,6 +70,10 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
 
                     case 'autoPopulateFromGit':
                         vscode.commands.executeCommand('specDrivenDevelopment.autoPopulateFromGit');
+                        break;
+
+                    case 'configureUserForFeatures':
+                        vscode.commands.executeCommand('specDrivenDevelopment.configureUserForFeatures');
                         break;
 
                     case 'getEstimationData':
@@ -438,6 +445,9 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                     </button>
                                     <button class="secondary-button" id="refresh-aws-btn" style="display: none;">
                                         🔄 Refresh Connection
+                                    </button>
+                                    <button class="danger-button" id="disconnect-aws-btn" style="display: none;">
+                                        🔌 Disconnect
                                     </button>
                                 </div>
                                 

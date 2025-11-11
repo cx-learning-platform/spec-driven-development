@@ -5,11 +5,11 @@ import { Prompt, CodeContext } from './promptManager';
 import { ResourceFile } from './resourceManager';
 
 export class CopilotIntegration {
-    private static readonly SPEC_DRIVEN_FILES_DIR = '.spec-driven-files';
-    private static readonly GITHUB_INSTRUCTIONS_DIR = '.spec-driven-files/.github/instructions';
-    private static readonly GITHUB_PROMPTS_DIR = '.spec-driven-files/.github/prompts';
-    private static readonly WORKSPACE_VSCODE_DIR = '.spec-driven-files/.vscode';
-    private static readonly WORKSPACE_HOWTO_DIR = '.spec-driven-files/how-to-guides';
+    private static readonly SPEC_DRIVEN_FILES_DIR = '.spec-driven-development';
+    private static readonly GITHUB_INSTRUCTIONS_DIR = '.spec-driven-development/.github/instructions';
+    private static readonly GITHUB_PROMPTS_DIR = '.spec-driven-development/.github/prompts';
+    private static readonly WORKSPACE_VSCODE_DIR = '.spec-driven-development/.vscode';
+    private static readonly WORKSPACE_HOWTO_DIR = '.spec-driven-development/how-to-guides';
     private outputChannel: vscode.OutputChannel;
 
     constructor() {
@@ -164,11 +164,11 @@ export class CopilotIntegration {
             console.log('📝 Skipping .gitignore update (user preference: commit AI files)');
         }
         
-        console.log(`✅ Created workspace-specific Copilot resources in .spec-driven-files/`);
-        console.log(`📋 Instructions: Complete directory copied to .spec-driven-files/.github/instructions/`);
-        console.log(`🎯 Prompts: Complete directory copied to .spec-driven-files/.github/prompts/`);
-        console.log(`⚙️ VS Code Settings: Complete directory copied to .spec-driven-files/.vscode/`);
-        console.log(`📖 How-to Guides: Complete directory copied to .spec-driven-files/how-to-guides/`);
+        console.log(`✅ Created workspace-specific Copilot resources in .spec-driven-development/`);
+        console.log(`📋 Instructions: Complete directory copied to .spec-driven-development/.github/instructions/`);
+        console.log(`🎯 Prompts: Complete directory copied to .spec-driven-development/.github/prompts/`);
+        console.log(`⚙️ VS Code Settings: Complete directory copied to .spec-driven-development/.vscode/`);
+        console.log(`📖 How-to Guides: Complete directory copied to .spec-driven-development/how-to-guides/`);
     }
 
     private groupInstructionsByMode(instructions: Instruction[]): { [mode: string]: Instruction[] } {
@@ -331,7 +331,7 @@ export class CopilotIntegration {
             // Create @workspace references for each instruction using correct file names
             const instructionPaths = instructions.map(instruction => {
                 const fileName = `${instruction.id}.instructions.md`;  // Use the actual filename format
-                return `@workspace .spec-driven-files/.github/instructions/${fileName}`;
+                return `@workspace .spec-driven-development/.github/instructions/${fileName}`;
             });
             
             compactMessage += instructionPaths.join('\n') + '\n';
@@ -339,7 +339,7 @@ export class CopilotIntegration {
 
         if (prompt) {
             const promptFileName = `${prompt.id}.prompt.md`;  // Use the actual prompt filename format
-            compactMessage += `\n🎯 **Task prompt:**\n@workspace .spec-driven-files/.github/prompts/${promptFileName}\n`;
+            compactMessage += `\n🎯 **Task prompt:**\n@workspace .spec-driven-development/.github/prompts/${promptFileName}\n`;
         }
         
         compactMessage += '\n🤖 Help me code following these workspace guidelines!';
@@ -373,7 +373,7 @@ export class CopilotIntegration {
             // Create @workspace references for each instruction using correct file names
             const instructionPaths = instructions.map(instruction => {
                 const fileName = `${instruction.id}.instructions.md`;  // Use the actual filename format
-                return `@workspace .spec-driven-files/.github/instructions/${fileName}`;
+                return `@workspace .spec-driven-development/.github/instructions/${fileName}`;
             });
             
             compactMessage += instructionPaths.join('\n') + '\n';
@@ -381,13 +381,13 @@ export class CopilotIntegration {
 
         if (prompt) {
             const promptFileName = `${prompt.id}.prompt.md`;  // Use the actual prompt filename format
-            compactMessage += `\n🎯 **Task prompt:**\n@workspace .spec-driven-files/.github/prompts/${promptFileName}\n`;
+            compactMessage += `\n🎯 **Task prompt:**\n@workspace .spec-driven-development/.github/prompts/${promptFileName}\n`;
         }
 
         // Handle multiple prompts (for Apply Contextual Prompts)
         if (prompts && prompts.length > 0) {
             compactMessage += '\n🎯 **Task prompts:**\n';
-            const promptPaths = prompts.map(p => `@workspace .spec-driven-files/.github/prompts/${p.id}.prompt.md`);
+            const promptPaths = prompts.map(p => `@workspace .spec-driven-development/.github/prompts/${p.id}.prompt.md`);
             compactMessage += promptPaths.join('\n') + '\n';
         }
 
@@ -502,16 +502,16 @@ export class CopilotIntegration {
             }
         }
         
-        // Check if workspace already contains .spec-driven-files folder
+        // Check if workspace already contains .spec-driven-development folder
         const specDrivenDir = vscode.Uri.file(path.join(workspaceRoot, CopilotIntegration.SPEC_DRIVEN_FILES_DIR));
         try {
             const specDrivenContents = await vscode.workspace.fs.readDirectory(specDrivenDir);
             if (specDrivenContents.length > 0) {
-                console.log(`📁 .spec-driven-files folder exists with: ${specDrivenContents.map(([name]) => name).join(', ')}`);
+                console.log(`📁 .spec-driven-development folder exists with: ${specDrivenContents.map(([name]) => name).join(', ')}`);
                 console.log('📁 Spec Driven Development files will be updated/created as needed');
             }
         } catch {
-            // .spec-driven-files directory doesn't exist yet, that's fine
+            // .spec-driven-development directory doesn't exist yet, that's fine
         }
     }
 
@@ -829,7 +829,7 @@ export class CopilotIntegration {
             // Create @workspace references for each prompt using correct file names
             const promptPaths = prompts.map(prompt => {
                 const fileName = `${prompt.id}.prompt.md`;  // Use the actual filename format
-                return `@workspace .spec-driven-files/.github/prompts/${fileName}`;
+                return `@workspace .spec-driven-development/.github/prompts/${fileName}`;
             });
             
             compactMessage += promptPaths.join('\n') + '\n';
@@ -941,8 +941,8 @@ export class CopilotIntegration {
             console.log('📝 .gitignore file not found, creating new one');
         }
         
-        // Define the entry to add - just the main spec-driven-files folder
-        const specDrivenFilesIgnore = '.spec-driven-files/';
+        // Define the entry to add - just the main spec-driven-development folder
+        const specDrivenFilesIgnore = '.spec-driven-development/';
         
         let needsUpdate = false;
         let additions = '';
@@ -953,11 +953,11 @@ export class CopilotIntegration {
             additions += '# Auto-generated AI guidance files - excluded from version control\n';
         }
         
-        // Check and add the spec-driven-files folder (this covers all subdirectories)
+        // Check and add the spec-driven-development folder (this covers all subdirectories)
         if (!gitignoreContent.includes(specDrivenFilesIgnore)) {
             additions += `${specDrivenFilesIgnore}\n`;
             needsUpdate = true;
-            console.log('📝 Adding .spec-driven-files/ to .gitignore');
+            console.log('📝 Adding .spec-driven-development/ to .gitignore');
         }
         
         if (needsUpdate) {
@@ -1074,7 +1074,7 @@ export class CopilotIntegration {
 
         for (const instruction of instructions) {
             const fileName = `${instruction.id}.instructions.md`;
-            const relativePath = `.spec-driven-files/.github/instructions/${fileName}`;
+            const relativePath = `.spec-driven-development/.github/instructions/${fileName}`;
             instructionPaths.push(relativePath);
         }
 
@@ -1088,7 +1088,7 @@ export class CopilotIntegration {
         }
 
         const fileName = `${prompt.id}.prompt.md`;
-        return `.spec-driven-files/.github/prompts/${fileName}`;
+        return `.spec-driven-development/.github/prompts/${fileName}`;
     }
 
     private async readInstructionFiles(instructions: Instruction[]): Promise<string[]> {
@@ -1112,7 +1112,7 @@ export class CopilotIntegration {
                 const content = decoder.decode(fileContent);
                 instructionContents.push(content);
                 
-                console.log(`📖 Read instruction from: .spec-driven-files/.github/instructions/${fileName}`);
+                console.log(`📖 Read instruction from: .spec-driven-development/.github/instructions/${fileName}`);
             } catch (error) {
                 // Fallback to original instruction content if file doesn't exist
                 console.log(`⚠️ Could not read ${instruction.id}.instructions.md, using original content`);
@@ -1141,7 +1141,7 @@ export class CopilotIntegration {
             const fileContent = await vscode.workspace.fs.readFile(filePath);
             const content = decoder.decode(fileContent);
             
-            console.log(`📖 Read prompt from: .spec-driven-files/.github/prompts/${fileName}`);
+            console.log(`📖 Read prompt from: .spec-driven-development/.github/prompts/${fileName}`);
             return content;
         } catch (error) {
             // Fallback to original prompt content if file doesn't exist

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AWSService } from './awsService';
 import { JiraService } from './jiraService';
+import { UserService } from './userService';
 import { CONFIG, getSalesforceApiUrl, getSalesforceQueryUrl, getSalesforceFeedbackUrl } from '../config/config';
 
 export interface Task {
@@ -16,20 +17,27 @@ export interface Task {
     Deployment_Date__c?: string;
     Jira_Priority__c?: string;
     CreatedDate?: string;
+    CreatedBy?: {
+        Email: string;
+    };
+    From_External_VS__c?: boolean;
+    Assignee_through_VS__c?: string;
 }
 
 export class TaskService {
     private context: vscode.ExtensionContext;
     private awsService: AWSService;
     private jiraService: JiraService;
+    private userService: UserService;
 
     // Static properties for concurrent request protection
     private static tokenRequestMutex = new Map<string, Promise<string>>();
 
-    constructor(context: vscode.ExtensionContext, awsService: AWSService) {
+    constructor(context: vscode.ExtensionContext, awsService: AWSService, userService: UserService) {
         this.context = context;
         this.awsService = awsService;
-        this.jiraService = new JiraService(context, awsService);
+        this.userService = userService;
+        this.jiraService = new JiraService(context, awsService, userService);
     }
 
     /**
@@ -162,16 +170,25 @@ export class TaskService {
     }
 
     /**
-     * Retrieve WIP (Work In Progress) tasks with pagination and search
+     * Retrieve WIP (Work In Progress) tasks with pagination and search - USER SPECIFIC
      */
     async retrieveWipTasks(options: { limit?: number; offset?: number; searchTerm?: string } = {}): Promise<{ tasks: Task[]; totalCount: number; hasMore: boolean }> {
         try {
             const token = await this.getAccessToken();
+            const userEmail = await this.userService.getUserEmail();
+            const userInfo = await this.userService.getUserInfo();
+            
+            // Validate that we have a properly configured email (not system-generated)
+            if (userInfo.source === 'system') {
+                throw new Error('User email not configured. Please configure your email using the "Configure User Email" command before retrieving tasks.');
+            }
+            
+            const username = await this.userService.getUsernameFromEmail();
             const limit = options.limit || 20;
             const offset = options.offset || 0;
 
-            // Build the WHERE clause with WIP conditions and optional search
-            let whereClause = 'WHERE Jira_Link__c != null AND Status__c != \'Done\'';
+            // Build the WHERE clause with WIP conditions, user filter (email OR assignee), and optional search
+            let whereClause = `WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
             
             if (options.searchTerm) {
                 const searchTerm = options.searchTerm.trim().replace(/'/g, "\\'");
@@ -187,9 +204,9 @@ export class TaskService {
                 }
             }
 
-            // Use the provided WIP query structure with pagination
+            // Use the provided WIP query structure with pagination and user filter
             const query = encodeURIComponent(
-                `SELECT Id,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Status__c,AI_Adopted__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
+                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Status__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
             console.log('WIP tickets Query:', query);
@@ -249,16 +266,26 @@ export class TaskService {
     }
 
     /**
-     * Retrieve Running tasks (created via Manage Features) with pagination and search
+     * Retrieve Running tasks (Tickets List - combines WIP and Done) with pagination and search - USER SPECIFIC
      */
     async retrieveRunningTasks(options: { limit?: number; offset?: number; searchTerm?: string } = {}): Promise<{ tasks: Task[]; totalCount: number; hasMore: boolean }> {
         try {
             const token = await this.getAccessToken();
+            const userEmail = await this.userService.getUserEmail();
+            const userInfo = await this.userService.getUserInfo();
+            
+            // Validate that we have a properly configured email (not system-generated)
+            if (userInfo.source === 'system') {
+                throw new Error('User email not configured. Please configure your email using the "Configure User Email" command before retrieving tasks.');
+            }
+            
+            const username = await this.userService.getUsernameFromEmail();
             const limit = options.limit || 20;
             const offset = options.offset || 0;
 
-            // Build the WHERE clause for search
-            let whereClause = '';
+            // Build the WHERE clause with user filter (email OR assignee) and optional search
+            let whereClause = `WHERE (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
+            
             if (options.searchTerm) {
                 const searchTerm = options.searchTerm.trim().replace(/'/g, "\\'");
                 
@@ -266,17 +293,19 @@ export class TaskService {
                 const jiraTicketPattern = /^[A-Z]+-\d+$/i;
                 if (jiraTicketPattern.test(searchTerm)) {
                     // Search specifically in Jira_Link__c for the ticket ID
-                    whereClause = ` WHERE Jira_Link__c LIKE '%${searchTerm}%'`;
+                    whereClause += ` AND Jira_Link__c LIKE '%${searchTerm}%'`;
                 } else {
                     // General search across multiple fields
-                    whereClause = ` WHERE (Name LIKE '%${searchTerm}%' OR Description__c LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
+                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Description__c LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
                 }
             }
 
-            // Use the existing query structure with pagination
+            // Use the existing query structure with pagination and user filter
             const query = encodeURIComponent(
-                `SELECT Id,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c FROM Feedback__c${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
+                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
+
+            console.log('Running tasks main query:', decodeURIComponent(query));
 
             const response = await fetch(getSalesforceQueryUrl(query), {
                 method: 'GET',
@@ -294,8 +323,10 @@ export class TaskService {
             
             // Get total count for pagination
             const countQuery = encodeURIComponent(
-                `SELECT COUNT() FROM Feedback__c${whereClause}`
+                `SELECT COUNT() FROM Feedback__c ${whereClause}`
             );
+            
+            console.log('Running tasks count query:', decodeURIComponent(countQuery));
             
             let totalCount = data.records?.length || 0;
             try {
@@ -310,9 +341,12 @@ export class TaskService {
                 if (countResponse.ok) {
                     const countData = await countResponse.json();
                     totalCount = countData.totalSize || 0;
+                    console.log(`Running tasks - Total count: ${totalCount}, Records fetched: ${data.records?.length || 0}, Offset: ${offset}, Limit: ${limit}`);
+                } else {
+                    console.warn('Running tasks count query failed:', countResponse.status, countResponse.statusText);
                 }
             } catch (error) {
-                console.warn('Failed to get total count, using records length');
+                console.warn('Failed to get total count for running tasks, using records length:', error);
             }
 
             return {
@@ -327,16 +361,25 @@ export class TaskService {
     }
 
     /**
-     * Retrieve Done tickets (Status = 'Done' in Salesforce) with pagination and search
+     * Retrieve Done tickets (Status = 'Done' in Salesforce) with pagination and search - USER SPECIFIC
      */
     async retrieveArchivedTasks(options: { limit?: number; offset?: number; searchTerm?: string } = {}): Promise<{ tasks: Task[]; totalCount: number; hasMore: boolean }> {
         try {
             const token = await this.getAccessToken();
+            const userEmail = await this.userService.getUserEmail();
+            const userInfo = await this.userService.getUserInfo();
+            
+            // Validate that we have a properly configured email (not system-generated)
+            if (userInfo.source === 'system') {
+                throw new Error('User email not configured. Please configure your email using the "Configure User Email" command before retrieving tasks.');
+            }
+            
+            const username = await this.userService.getUsernameFromEmail();
             const limit = options.limit || 20;
             const offset = options.offset || 0;
 
-            // Build the WHERE clause for Done tickets
-            let whereClause = "WHERE Status__c = 'Done'";
+            // Build the WHERE clause for Done tickets with user filter (email OR assignee)
+            let whereClause = `WHERE Status__c = 'Done' AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
             
             if (options.searchTerm) {
                 const searchTerm = options.searchTerm.trim().replace(/'/g, "\\'");
@@ -352,9 +395,9 @@ export class TaskService {
                 }
             }
 
-            // Query for Done tickets from Salesforce (API 13 pattern)
+            // Query for Done tickets from Salesforce (API 13 pattern) with user filter
             const query = encodeURIComponent(
-                `SELECT Id,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
+                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
             const response = await fetch(getSalesforceQueryUrl(query), {

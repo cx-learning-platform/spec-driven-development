@@ -21,6 +21,13 @@ export const CONFIG = {
         }
     },
     
+    aws: {
+        secretsManager: {
+            // Default secret name for Salesforce credentials
+            defaultSecretName: 'lcp-devsecops-plugin'
+        }
+    },
+    
     retry: {
         maxRetries: 3,
         baseDelay: 1000, // 1 second
