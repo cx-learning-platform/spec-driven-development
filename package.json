@@ -303,7 +303,7 @@
         },
         "specDrivenDevelopment.salesforceSecretName": {
           "type": "string",
-          "default": "salesforce",
+          "default": "lcp-devsecops-plugin",
           "description": "Name of the AWS Secrets Manager secret containing Salesforce credentials"
         },
         "specDrivenDevelopment.salesforceSecretKeywords": {
