@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AWSService } from './awsService';
+import { UserService } from './userService';
 import { EstimationData } from './estimationParser';
 import { CONFIG, getSalesforceAuthUrl, getSalesforceApiUrl } from '../config/config';
 
@@ -49,13 +50,15 @@ export interface SalesforceQueryResponse {
 
 export class JiraService {
     private awsService: AWSService;
+    private userService: UserService;
     private context: vscode.ExtensionContext;
     private cachedAuthToken?: string;
     private tokenExpiry?: Date;
 
-    constructor(context: vscode.ExtensionContext, awsService: AWSService) {
+    constructor(context: vscode.ExtensionContext, awsService: AWSService, userService: UserService) {
         this.context = context;
         this.awsService = awsService;
+        this.userService = userService;
         this.initializeFetch();
     }
 

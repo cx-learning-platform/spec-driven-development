@@ -3,6 +3,7 @@ import * as os from 'os';
 import { NotificationManager } from './notificationManager';
 import { JiraService } from './jiraService';
 import { AWSService } from './awsService';
+import { UserService } from './userService';
 import { GitService } from './gitService';
 import { CONFIG, getSalesforceApiUrl, getSalesforceDescribeUrl, getSalesforceQueryUrl } from '../config/config';
 
@@ -82,15 +83,17 @@ export class FeedbackService {
     private notificationManager: NotificationManager;
     private jiraService: JiraService;
     private awsService: AWSService;
+    private userService: UserService;
 
     // Static properties for concurrent request protection
     private static tokenRequestMutex = new Map<string, Promise<string>>();
 
-    constructor(context: vscode.ExtensionContext, awsService: AWSService) {
+    constructor(context: vscode.ExtensionContext, awsService: AWSService, userService: UserService) {
         this.context = context;
         this.notificationManager = NotificationManager.getInstance(context);
         this.awsService = awsService;
-        this.jiraService = new JiraService(context, awsService);
+        this.userService = userService;
+        this.jiraService = new JiraService(context, awsService, userService);
     }
 
     /**
@@ -548,6 +551,9 @@ export class FeedbackService {
             // Get Salesforce access token
             const accessToken = await this.getAccessTokenWithRetryAndProtection();
 
+            // Get user information for assignee field
+            const username = await this.userService.getUsernameFromEmail();
+
             // Prepare Salesforce payload
             const salesforcePayload: any = {
                 Name: feedbackData.name,
@@ -555,7 +561,9 @@ export class FeedbackService {
                 Estimated_Effort_Hours__c: feedbackData.estimatedHours,
                 Type__c: feedbackData.feedbackType,
                 Initiative__c: feedbackData.initiativeId,
-                Epic__c: feedbackData.epicId
+                Epic__c: feedbackData.epicId,
+                From_External_VS__c: true,
+                Assignee_through_VS__c: username
             };
 
             // Add acceptance criteria if it's a Story type

@@ -107,7 +107,7 @@ When you use "Add Workspace Guidelines", the extension creates:
 
 ```
 your-project/
-├── .spec-driven-files/
+├── .spec-driven-development/
 │   ├── instructions/          # 📚 Contextual Coding Instructions
 │   │   ├── go.best-practices.instructions.md
 │   │   ├── go.development.instructions.md
@@ -186,7 +186,7 @@ your-project/
 
 ## 📖 Documentation
 
-For detailed usage instructions, examples, and troubleshooting, visit our [GitHub repository](https://github.com/Relanto-LKM-POC/spec-driven-development).
+For detailed usage instructions, examples, and troubleshooting, visit our [GitHub repository](https://github.com/cx-learning-platform/spec-driven-development).
 
 ## 🤝 Support & Feature
 
@@ -195,7 +195,7 @@ For detailed usage instructions, examples, and troubleshooting, visit our [GitHu
 
 ## 📄 License
 
-MIT License - see [LICENSE](https://github.com/Relanto-LKM-POC/spec-driven-development/blob/feature-1/LICENSE) file for details.
+MIT License - see [LICENSE](https://github.com/cx-learning-platform/spec-driven-development/blob/feature-1/LICENSE) file for details.
 
 ---
 

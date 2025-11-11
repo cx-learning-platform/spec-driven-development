@@ -3,6 +3,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import { CONFIG } from '../config/config';
 
 const execAsync = promisify(exec);
 
@@ -29,6 +30,7 @@ export class AWSService {
     private context: vscode.ExtensionContext;
     private currentProfile: string;
     private currentRegion: string;
+    private selectedProfile: string = ''; // Stores the profile that successfully connected
     private salesforceCredentials?: SalesforceCredentials;
     private connectionStatus: AWSConnectionStatus = {
         connected: false,
@@ -39,6 +41,8 @@ export class AWSService {
         this.context = context;
         this.currentProfile = this.getConfiguredProfile();
         this.currentRegion = this.getConfiguredRegion();
+        // Restore selected profile from previous session
+        this.selectedProfile = this.context.globalState.get<string>('specDrivenDevelopment.awsSelectedProfile', '');
     }
 
     private getConfiguredProfile(): string {
@@ -49,6 +53,39 @@ export class AWSService {
     private getConfiguredRegion(): string {
         const configuredRegion = vscode.workspace.getConfiguration('specDrivenDevelopment').get('awsRegion', '');
         return configuredRegion || ''; // Empty string means use default AWS CLI region
+    }
+
+    /**
+     * Check if AWS CLI is installed
+     */
+    private async checkAWSCliInstalled(): Promise<boolean> {
+        try {
+            await execAsync('aws --version');
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    /**
+     * Check if connected to AWS
+     */
+    public async isConnected(): Promise<boolean> {
+        return this.connectionStatus.connected;
+    }
+
+    /**
+     * Get connection timestamp
+     */
+    public async getConnectionTime(): Promise<string | undefined> {
+        return this.connectionStatus.sessionExpiry;
+    }
+
+    /**
+     * Get the selected AWS profile
+     */
+    public getSelectedProfile(): string {
+        return this.selectedProfile;
     }
 
     private readFromEnvFile(key: string): string | undefined {
@@ -79,12 +116,12 @@ export class AWSService {
     }
 
     private getConfiguredSalesforceSecretName(): string {
-        // Priority: .env file > VS Code settings > default
+        // Priority: .env file > VS Code settings > config.ts default
         const envValue = this.readFromEnvFile('SALESFORCE_SECRET_NAME');
         if (envValue) return envValue;
         
         const configuredSecret = vscode.workspace.getConfiguration('specDrivenDevelopment').get('salesforceSecretName', '');
-        return configuredSecret || 'salesforce';
+        return configuredSecret || CONFIG.aws.secretsManager.defaultSecretName;
     }
 
     private getConfiguredSalesforceKeywords(): string[] {
@@ -101,10 +138,11 @@ export class AWSService {
 
     private buildAwsCommand(baseCommand: string, profile?: string, region?: string): string {
         let command = baseCommand;
-        const useProfile = profile || this.currentProfile;
+        // Priority: explicit profile param > selectedProfile > currentProfile (config)
+        const useProfile = profile || this.selectedProfile || this.currentProfile;
         const useRegion = region || this.currentRegion;
         
-        if (useProfile) {
+        if (useProfile && useProfile !== 'default') {
             command += ` --profile ${useProfile}`;
         }
         if (useRegion) {
@@ -117,32 +155,89 @@ export class AWSService {
 
     public async connectToAWS(): Promise<AWSConnectionStatus> {
         try {
-            await this.testAWSCliCredentials();
-            const callerIdentity = await this.getAWSCallerIdentity();
-            
-            // Try to fetch Salesforce credentials, but don't fail if they're not found
-            let salesforceCredentialsAvailable = false;
-            try {
-                this.salesforceCredentials = await this.fetchSalesforceCredentials();
-                salesforceCredentialsAvailable = true;
-            } catch (credError) {
-                console.warn('Salesforce credentials not available:', (credError as Error).message);
-                // Continue without Salesforce credentials - they can be fetched later if needed
-            }
-            
-            this.connectionStatus = {
-                connected: true,
-                status: 'connected',
-                account: callerIdentity.Account,
-                region: this.currentRegion,
-                profile: this.currentProfile,
-                secretsManagerAccess: true,
-                sessionExpiry: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
-                error: salesforceCredentialsAvailable ? undefined : 'Salesforce credentials not found - JIRA features may be limited'
-            };
+            // Show progress indicator
+            return await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: "Connecting to AWS...",
+                cancellable: false
+            }, async (progress) => {
+                
+                // Check if already connected
+                if (this.connectionStatus.connected) {
+                    const reconnect = await vscode.window.showWarningMessage(
+                        'Already connected to AWS. Do you want to refresh credentials?',
+                        'Yes', 'No'
+                    );
+                    if (reconnect !== 'Yes') {
+                        return this.connectionStatus;
+                    }
+                }
 
-            await this.context.globalState.update('specDrivenDevelopment.awsStatus', this.connectionStatus);
-            return this.connectionStatus;
+                progress.report({ increment: 10, message: "Checking AWS CLI installation..." });
+
+                // 1. Check AWS CLI installation
+                const isInstalled = await this.checkAWSCliInstalled();
+                if (!isInstalled) {
+                    throw new Error(
+                        'AWS CLI is not installed. Please install it from: https://aws.amazon.com/cli/'
+                    );
+                }
+
+                progress.report({ increment: 20, message: "Validating credentials..." });
+
+                // 2. Test AWS credentials with profile priority
+                try {
+                    this.selectedProfile = await this.testAWSCliWithProfiles();
+                    console.log(`Selected AWS profile: ${this.selectedProfile}`);
+                } catch (error: any) {
+                    throw new Error(error.message);
+                }
+
+                progress.report({ increment: 30, message: "Fetching account info..." });
+
+                const callerIdentity = await this.getAWSCallerIdentity();
+                
+                progress.report({ increment: 50, message: "Searching for Salesforce credentials..." });
+
+                // Try to fetch Salesforce credentials, but don't fail if they're not found
+                let salesforceCredentialsAvailable = false;
+                let credentialError: string | undefined;
+                try {
+                    this.salesforceCredentials = await this.fetchSalesforceCredentials();
+                    
+                    progress.report({ increment: 80, message: "Validating credentials..." });
+                    
+                    // 4. Robust validation
+                    this.validateSalesforceCredentials(this.salesforceCredentials);
+                    salesforceCredentialsAvailable = true;
+                } catch (credError) {
+                    console.warn('Salesforce credentials not available:', (credError as Error).message);
+                    credentialError = (credError as Error).message;
+                    // Continue without Salesforce credentials - they can be fetched later if needed
+                }
+
+                progress.report({ increment: 90, message: "Saving connection state..." });
+                
+                // 5. Update connection state
+                this.connectionStatus = {
+                    connected: true,
+                    status: 'connected',
+                    account: callerIdentity.Account,
+                    region: this.currentRegion,
+                    profile: this.selectedProfile, // Use the profile that actually worked
+                    secretsManagerAccess: true,
+                    sessionExpiry: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+                    error: salesforceCredentialsAvailable ? undefined : `Salesforce credentials not found - ${credentialError}`
+                };
+
+                await this.context.globalState.update('specDrivenDevelopment.awsStatus', this.connectionStatus);
+                await this.context.globalState.update('specDrivenDevelopment.awsConnectionTime', new Date().toISOString());
+                await this.context.globalState.update('specDrivenDevelopment.awsSelectedProfile', this.selectedProfile);
+
+                progress.report({ increment: 100, message: "Connected!" });
+
+                return this.connectionStatus;
+            });
         } catch (error) {
             const errorStatus: AWSConnectionStatus = {
                 connected: false,
@@ -260,15 +355,99 @@ export class AWSService {
             await this.testAWSCliCredentials();
             return this.connectionStatus;
         } catch (error) {
-            this.connectionStatus = {
-                connected: false,
-                status: 'error',
-                error: 'AWS credentials expired or invalid'
-            };
+            // Check if it's an expired token error
+            if (this.isExpiredTokenError(error)) {
+                this.handleExpiredTokenError();
+                this.connectionStatus = {
+                    connected: false,
+                    status: 'error',
+                    error: 'AWS session token expired'
+                };
+            } else {
+                this.connectionStatus = {
+                    connected: false,
+                    status: 'error',
+                    error: 'AWS credentials expired or invalid'
+                };
+            }
             this.salesforceCredentials = undefined;
             await this.context.globalState.update('specDrivenDevelopment.awsStatus', this.connectionStatus);
             return this.connectionStatus;
         }
+    }
+
+    /**
+     * Test AWS CLI credentials with profile priority: default → development → dev
+     * Returns the profile name that works
+     */
+    private async testAWSCliWithProfiles(): Promise<string> {
+        // Build profile priority list
+        const profiles: string[] = [];
+        
+        // Add configured profile first if set
+        if (this.currentProfile) {
+            profiles.push(this.currentProfile);
+        }
+        
+        // Add standard fallback profiles (avoid duplicates)
+        ['default', 'development', 'dev'].forEach(p => {
+            if (!profiles.includes(p)) {
+                profiles.push(p);
+            }
+        });
+
+        let lastError = '';
+        let hasExpiredToken = false;
+
+        for (const profile of profiles) {
+            try {
+                const command = profile === 'default' 
+                    ? 'aws sts get-caller-identity'
+                    : `aws sts get-caller-identity --profile ${profile}`;
+                
+                await execAsync(command);
+                console.log(`Successfully connected using profile: ${profile}`);
+                
+                // Warn if not using configured profile
+                if (this.currentProfile && profile !== this.currentProfile) {
+                    vscode.window.showWarningMessage(
+                        `Configured profile "${this.currentProfile}" failed. Using fallback profile: ${profile}`
+                    );
+                }
+                
+                return profile;
+            } catch (error: any) {
+                lastError = error.message;
+                
+                // Detect expired session token errors (Cisco Duo SSO)
+                if (error.message.includes('ExpiredToken') || 
+                    error.message.includes('InvalidClientTokenId') ||
+                    error.message.includes('token has expired')) {
+                    hasExpiredToken = true;
+                }
+                
+                continue;
+            }
+        }
+
+        // If we detected an expired token, show Cisco Duo SSO specific error
+        if (hasExpiredToken) {
+            throw new Error(
+                `AWS session token expired.\n\n` +
+                `For Cisco Duo SSO users:\n` +
+                `  1. Run 'duo-auth' to refresh your session\n` +
+                `  2. Or re-authenticate through your SSO portal\n\n` +
+                `For standard AWS users:\n` +
+                `  Run 'aws configure' to update your credentials.`
+            );
+        }
+
+        // None of the profiles worked
+        throw new Error(
+            `No AWS profiles configured.\n` +
+            `Tried: ${profiles.map(p => `[${p}]`).join(', ')}\n\n` +
+            `Run 'aws configure' to set up credentials or 'duo-auth' for Cisco SSO.`
+        );
     }
 
     private async testAWSCliCredentials(): Promise<void> {
@@ -318,13 +497,20 @@ export class AWSService {
                 );
             }
             
-            // If still not found, try fallback keywords
+            // If still not found, ask user before trying fallback keywords
             if (!salesforceSecret) {
-                console.log(`Secret "${configuredSecretName}" not found, trying fallback keywords: ${fallbackKeywords.join(', ')}`);
-                salesforceSecret = secretsList.SecretList.find((secret: any) => {
-                    const name = secret.Name.toLowerCase();
-                    return fallbackKeywords.some(keyword => name.includes(keyword.toLowerCase()));
-                });
+                const fallback = await vscode.window.showWarningMessage(
+                    `Secret "${configuredSecretName}" not found. Search using keywords [${fallbackKeywords.join(', ')}]?`,
+                    'Yes', 'No'
+                );
+                
+                if (fallback === 'Yes') {
+                    console.log(`Trying fallback keywords: ${fallbackKeywords.join(', ')}`);
+                    salesforceSecret = secretsList.SecretList.find((secret: any) => {
+                        const name = secret.Name.toLowerCase();
+                        return fallbackKeywords.some(keyword => name.includes(keyword.toLowerCase()));
+                    });
+                }
             }
             
             if (!salesforceSecret) {
@@ -369,8 +555,79 @@ export class AWSService {
                 security_token: credentials.security_token
             };
         } catch (error) {
+            // Check if it's an expired token error
+            if (this.isExpiredTokenError(error)) {
+                this.handleExpiredTokenError();
+                throw new Error('AWS session token expired. Please refresh your credentials.');
+            }
             throw new Error(`Failed to fetch Salesforce credentials: ${(error as Error).message}`);
         }
+    }
+
+    /**
+     * Validate Salesforce credentials structure and format
+     */
+    private validateSalesforceCredentials(credentials: SalesforceCredentials): void {
+        const required = ['client_id', 'client_secret', 'username', 'password'];
+        const missing = required.filter(field => !(credentials as any)[field]);
+        
+        if (missing.length > 0) {
+            throw new Error(
+                `Invalid Salesforce credentials. Missing fields: ${missing.join(', ')}`
+            );
+        }
+
+        // Validate username format (should be an email)
+        if (!credentials.username.includes('@')) {
+            throw new Error('Salesforce username must be a valid email address');
+        }
+
+        // Validate client_id and client_secret are not empty
+        if (credentials.client_id.trim().length === 0) {
+            throw new Error('client_id cannot be empty');
+        }
+
+        if (credentials.client_secret.trim().length === 0) {
+            throw new Error('client_secret cannot be empty');
+        }
+    }
+
+    /**
+     * Check if an AWS error is due to expired session token (Cisco Duo SSO)
+     */
+    private isExpiredTokenError(error: any): boolean {
+        const errorMessage = error.message || error.toString();
+        return errorMessage.includes('ExpiredToken') || 
+               errorMessage.includes('InvalidClientTokenId') ||
+               errorMessage.includes('token has expired') ||
+               errorMessage.includes('security token included in the request is expired');
+    }
+
+    /**
+     * Handle expired token errors with user-friendly notifications
+     */
+    private handleExpiredTokenError(): void {
+        vscode.window.showErrorMessage(
+            '🔐 AWS session token expired',
+            'Refresh Session',
+            'Dismiss'
+        ).then(selection => {
+            if (selection === 'Refresh Session') {
+                vscode.window.showInformationMessage(
+                    'For Cisco Duo SSO users:\n' +
+                    '  1. Run "duo-auth" in your terminal\n' +
+                    '  2. Or re-authenticate through your SSO portal\n\n' +
+                    'For standard AWS users:\n' +
+                    '  Run "aws configure" to update credentials',
+                    'Copy duo-auth Command'
+                ).then(choice => {
+                    if (choice === 'Copy duo-auth Command') {
+                        vscode.env.clipboard.writeText('duo-auth');
+                        vscode.window.showInformationMessage('Command copied to clipboard!');
+                    }
+                });
+            }
+        });
     }
 
     public getSalesforceCredentials(): SalesforceCredentials | undefined {
@@ -428,7 +685,10 @@ export class AWSService {
 
     public async disconnect(): Promise<void> {
         this.connectionStatus = { connected: false, status: 'disconnected' };
+        this.selectedProfile = ''; // Clear selected profile
         await this.context.globalState.update('specDrivenDevelopment.awsStatus', undefined);
+        await this.context.globalState.update('specDrivenDevelopment.awsConnectionTime', undefined);
+        await this.context.globalState.update('specDrivenDevelopment.awsSelectedProfile', undefined);
         this.salesforceCredentials = undefined;
     }
 

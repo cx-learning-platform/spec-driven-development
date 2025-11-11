@@ -7,11 +7,12 @@ import { CopilotIntegration } from './copilotIntegration';
 import { ResourceManager } from './resourceManager';
 import { SpecDrivenDevelopmentPanel } from './ui/webviewPanel';
 import { AWSService } from './services/awsService';
+import { UserService } from './services/userService';
 import { EstimationParser } from './services/estimationParser';
 import { JiraService } from './services/jiraService';
 import { FeedbackService } from './services/feedbackService';
 import { TaskService } from './services/taskService';
-import { TaskMasterService } from './services/taskMasterService';
+import { TaskMasterService, TaskMasterTask } from './services/taskMasterService';
 // GitHub configuration removed - only using Salesforce config now
 import { NotificationManager } from './services/notificationManager';
 
@@ -22,14 +23,37 @@ let copilotIntegration: CopilotIntegration;
 let resourceManager: ResourceManager;
 let specDrivenDevelopmentPanel: SpecDrivenDevelopmentPanel;
 let awsService: AWSService;
+let userService: UserService;
 let estimationParser: EstimationParser;
 let jiraService: JiraService;
 let feedbackService: FeedbackService;
 let taskService: TaskService;
 let notificationManager: NotificationManager;
+let awsStatusBarItem: vscode.StatusBarItem;
 
 // Module-level timeout variable for debouncing
 let vibeAnalysisTimeout: NodeJS.Timeout | undefined;
+
+// Function to update AWS status bar
+async function updateAWSStatusBar() {
+    if (!awsStatusBarItem || !awsService) return;
+    
+    const isConnected = await awsService.isConnected();
+    if (isConnected) {
+        const connectionTime = await awsService.getConnectionTime();
+        const selectedProfile = awsService.getSelectedProfile();
+        const profileMsg = selectedProfile ? ` [${selectedProfile}]` : '';
+        const expiryMsg = connectionTime ? `\nExpires: ${new Date(connectionTime).toLocaleString()}` : '';
+        
+        awsStatusBarItem.text = `$(cloud) AWS: Connected${profileMsg}`;
+        awsStatusBarItem.tooltip = `AWS Connected${profileMsg}${expiryMsg}`;
+        awsStatusBarItem.command = 'specDrivenDevelopment.disconnectAWS';
+    } else {
+        awsStatusBarItem.text = "$(cloud) AWS: Disconnected";
+        awsStatusBarItem.tooltip = "AWS Connection Status - Click to connect";
+        awsStatusBarItem.command = 'specDrivenDevelopment.connectAWS';
+    }
+}
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log('🎯 Spec Driven Development is now active!');
@@ -50,10 +74,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Initialize new services
         awsService = new AWSService(context);
+        userService = new UserService(context);
         estimationParser = new EstimationParser(context);
-        jiraService = new JiraService(context, awsService);
-        feedbackService = new FeedbackService(context, awsService);
-        taskService = new TaskService(context, awsService);
+        jiraService = new JiraService(context, awsService, userService);
+        feedbackService = new FeedbackService(context, awsService, userService);
+        taskService = new TaskService(context, awsService, userService);
         
         // Initialize notification manager
         notificationManager = NotificationManager.getInstance(context);
@@ -83,6 +108,21 @@ export async function activate(context: vscode.ExtensionContext) {
         statusBarItem.command = 'specDrivenDevelopment.openPanel';
         statusBarItem.show();
         context.subscriptions.push(statusBarItem);
+
+        // AWS connection status bar item
+        awsStatusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+        awsStatusBarItem.text = "$(cloud) AWS: Disconnected";
+        awsStatusBarItem.tooltip = "AWS Connection Status - Click to connect";
+        awsStatusBarItem.command = 'specDrivenDevelopment.connectAWS';
+        awsStatusBarItem.show();
+        context.subscriptions.push(awsStatusBarItem);
+
+        // Update status bar initially
+        await updateAWSStatusBar();
+
+        // Update status bar when connection changes
+        const updateStatusBarInterval = setInterval(updateAWSStatusBar, 30000); // Every 30 seconds
+        context.subscriptions.push({ dispose: () => clearInterval(updateStatusBarInterval) });
 
         // Show welcome message for first-time users
         const hasShownWelcome = context.globalState.get('hasShownWelcome', false);
@@ -581,26 +621,32 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const connectAWSCommand = vscode.commands.registerCommand('specDrivenDevelopment.connectAWS', async () => {
         try {
-            await vscode.window.withProgress({
+            const status = await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
                 title: 'Connecting to AWS...',
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 0, message: 'Testing AWS CLI credentials...' });
-                const status = await awsService.connectToAWS();
-                
-                if (specDrivenDevelopmentPanel) {
-                    specDrivenDevelopmentPanel.updateAWSStatus(status);
-                }
-                
-                if (status.connected) {
-                    vscode.window.showInformationMessage('✅ Successfully connected to AWS!');
-                } else {
-                    vscode.window.showErrorMessage(`❌ Failed to connect to AWS: ${status.error}`);
-                }
+                return await awsService.connectToAWS();
             });
+            
+            // Update UI with the status
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.updateAWSStatus(status);
+            }
+            
+            // Show success message
+            if (status.connected) {
+                const profileMsg = status.profile ? ` using [${status.profile}] profile` : '';
+                vscode.window.showInformationMessage(`✅ Successfully connected to AWS${profileMsg}!`);
+            }
+            
+            // Update status bar
+            await updateAWSStatusBar();
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to connect to AWS: ${(error as Error).message}`);
+            // Only show error once here
+            vscode.window.showErrorMessage(`❌ ${(error as Error).message}`);
+            await updateAWSStatusBar();
         }
     });
 
@@ -610,9 +656,29 @@ function registerCommands(context: vscode.ExtensionContext) {
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.updateAWSStatus(status);
             }
-            vscode.window.showInformationMessage('AWS connection refreshed');
+            vscode.window.showInformationMessage('✅ AWS connection refreshed successfully');
+            await updateAWSStatusBar();
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to refresh AWS connection: ${(error as Error).message}`);
+            vscode.window.showErrorMessage(`❌ Failed to refresh AWS connection: ${(error as Error).message}`);
+            await updateAWSStatusBar();
+        }
+    });
+
+    const disconnectAWSCommand = vscode.commands.registerCommand('specDrivenDevelopment.disconnectAWS', async () => {
+        try {
+            await awsService.disconnect();
+            const disconnectedStatus = {
+                connected: false,
+                status: 'disconnected' as const
+            };
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.updateAWSStatus(disconnectedStatus);
+            }
+            vscode.window.showInformationMessage('✅ Disconnected from AWS');
+            await updateAWSStatusBar();
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to disconnect from AWS: ${(error as Error).message}`);
+            await updateAWSStatusBar();
         }
     });
 
@@ -812,6 +878,13 @@ function registerCommands(context: vscode.ExtensionContext) {
     const autoPopulateFromGitCommand = vscode.commands.registerCommand('specDrivenDevelopment.autoPopulateFromGit', async () => {
         try {
             console.log('Auto-populate from Git command triggered');
+            
+            // Trigger username/email configuration along with git auto-population
+            console.log('Triggering username/email configuration for correct assignee...');
+            const userEmail = await userService.getUserEmail();
+            const username = await userService.getUsernameFromEmail();
+            console.log(`User configured: ${userEmail} (username: ${username})`);
+            
             const result = await feedbackService.autoPopulateFromGit();
             
             if (specDrivenDevelopmentPanel) {
@@ -821,6 +894,7 @@ function registerCommands(context: vscode.ExtensionContext) {
             // Log result for debugging
             if (result.success) {
                 console.log(`Auto-population successful: ${result.repoName} → ${result.applicationName} → ${result.recommendedInitiativeName}`);
+                console.log(`Assignee configured: ${username} (${userEmail})`);
             } else {
                 console.log(`Auto-population failed: ${result.fallbackReason}`);
             }
@@ -835,6 +909,26 @@ function registerCommands(context: vscode.ExtensionContext) {
                     fallbackReason: `Error: ${(error as Error).message}`
                 });
             }
+        }
+    });
+
+    const configureUserForFeaturesCommand = vscode.commands.registerCommand('specDrivenDevelopment.configureUserForFeatures', async () => {
+        try {
+            console.log('Configure user for features command triggered');
+            
+            // Trigger username/email configuration for feature creation
+            const userEmail = await userService.getUserEmail();
+            const username = await userService.getUsernameFromEmail();
+            console.log(`User configured for feature creation: ${userEmail} (username: ${username})`);
+            
+            // Optional: Show subtle notification that user is configured
+            const userInfo = await userService.getUserInfo();
+            if (userInfo.source !== 'system') {
+                console.log(`✅ User ready for feature creation with assignee: ${username}`);
+            }
+            
+        } catch (error) {
+            console.error('Error in configureUserForFeaturesCommand:', error);
         }
     });
 
@@ -913,17 +1007,34 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
 
             if (taskDataArray.length === 1) {
-                vscode.window.showInformationMessage('TaskMaster task imported successfully!');
+                const task = taskDataArray[0];
+                const missingFields = ['description', 'type', 'estimation', 'priority', 'status'].filter(field => !task[field as keyof TaskMasterTask]);
+                if (missingFields.length > 0) {
+                    vscode.window.showInformationMessage(
+                        `TaskMaster task imported successfully! Please manually fill: ${missingFields.join(', ')}`
+                    );
+                } else {
+                    vscode.window.showInformationMessage('TaskMaster task imported successfully!');
+                }
             } else {
                 vscode.window.showInformationMessage(`Found ${taskDataArray.length} tasks. Please select one to import.`);
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            vscode.window.showErrorMessage(`Failed to import TaskMaster data: ${errorMessage}`);
+            
+            // Provide more helpful error messages for common issues
+            let userFriendlyMessage = errorMessage;
+            if (errorMessage.includes('Missing essential fields')) {
+                userFriendlyMessage = `${errorMessage}\n\nNote: Only 'id' and 'title' are required. Other fields can be filled manually after import.`;
+            } else if (errorMessage.includes('Invalid JSON format')) {
+                userFriendlyMessage = `${errorMessage}\n\nPlease check the .taskmaster/tasks/task.json file for syntax errors.`;
+            }
+            
+            vscode.window.showErrorMessage(`Failed to import TaskMaster data: ${userFriendlyMessage}`);
             
             // Send error to webview so it can re-enable the button
             if (specDrivenDevelopmentPanel) {
-                specDrivenDevelopmentPanel.sendTaskMasterError(errorMessage);
+                specDrivenDevelopmentPanel.sendTaskMasterError(userFriendlyMessage);
             }
         }
     });
@@ -1450,7 +1561,21 @@ function registerCommands(context: vscode.ExtensionContext) {
             });
         } catch (error) {
             console.error('Error in retrieveWipTasksCommand:', error);
-            vscode.window.showErrorMessage(`Failed to retrieve WIP tickets: ${(error as Error).message}`);
+            
+            // Check if this is an email configuration error
+            const errorMessage = (error as Error).message;
+            if (errorMessage.includes('User email not configured')) {
+                const action = await vscode.window.showErrorMessage(
+                    '❌ User email not configured. Configure your email to retrieve personalized tasks.',
+                    'Configure Email'
+                );
+                if (action === 'Configure Email') {
+                    vscode.commands.executeCommand('vibeAssistant.configureUser');
+                }
+            } else {
+                vscode.window.showErrorMessage(`Failed to retrieve WIP tickets: ${errorMessage}`);
+            }
+            
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendTaskList([], 'wip', { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 20 });
             }
@@ -1501,7 +1626,21 @@ function registerCommands(context: vscode.ExtensionContext) {
             });
         } catch (error) {
             console.error('Error in retrieveRunningTasksCommand:', error);
-            vscode.window.showErrorMessage(`Failed to retrieve tickets: ${(error as Error).message}`);
+            
+            // Check if this is an email configuration error
+            const errorMessage = (error as Error).message;
+            if (errorMessage.includes('User email not configured')) {
+                const action = await vscode.window.showErrorMessage(
+                    '❌ User email not configured. Configure your email to retrieve personalized tasks.',
+                    'Configure Email'
+                );
+                if (action === 'Configure Email') {
+                    vscode.commands.executeCommand('vibeAssistant.configureUser');
+                }
+            } else {
+                vscode.window.showErrorMessage(`Failed to retrieve tickets: ${errorMessage}`);
+            }
+            
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendTaskList([], 'running', { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 20 });
             }
@@ -1552,7 +1691,21 @@ function registerCommands(context: vscode.ExtensionContext) {
             });
         } catch (error) {
             console.error('Error in retrieveArchivedTasksCommand:', error);
-            vscode.window.showErrorMessage(`Failed to retrieve done tickets: ${(error as Error).message}`);
+            
+            // Check if this is an email configuration error
+            const errorMessage = (error as Error).message;
+            if (errorMessage.includes('User email not configured')) {
+                const action = await vscode.window.showErrorMessage(
+                    '❌ User email not configured. Configure your email to retrieve personalized tasks.',
+                    'Configure Email'
+                );
+                if (action === 'Configure Email') {
+                    vscode.commands.executeCommand('vibeAssistant.configureUser');
+                }
+            } else {
+                vscode.window.showErrorMessage(`Failed to retrieve done tickets: ${errorMessage}`);
+            }
+            
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendTaskList([], 'archived', { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 20 });
             }
@@ -1728,6 +1881,124 @@ function registerCommands(context: vscode.ExtensionContext) {
         }
     });
 
+    // User Configuration Command
+    const configureUserCommand = vscode.commands.registerCommand('vibeAssistant.configureUser', async () => {
+        try {
+            // Get current configured email without triggering auto-detection popup
+            const currentConfiguredEmail = vscode.workspace.getConfiguration('vibeAssistant').get<string>('userEmail') || '';
+            
+            // Show input box directly for email configuration
+            const newEmail = await vscode.window.showInputBox({
+                prompt: 'Enter your Cisco email address for JIRA ticket filtering',
+                placeHolder: 'e.g., john.doe@cisco.com',
+                value: currentConfiguredEmail,
+                validateInput: (value) => {
+                    if (!value || value.trim() === '') {
+                        return 'Email address is required';
+                    }
+                    
+                    // Check basic email format first
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(value)) {
+                        // More specific feedback based on what's missing
+                        if (!value.includes('@')) {
+                            return 'Please include @ in your email address';
+                        }
+                        if (!value.includes('.')) {
+                            return 'Please include a domain (e.g., @cisco.com)';
+                        }
+                        return 'Please enter a valid email format (e.g., your.name@cisco.com)';
+                    }
+                    
+                    // Check domain requirement - more specific feedback
+                    if (!value.toLowerCase().endsWith('@cisco.com')) {
+                        const domain = value.toLowerCase().split('@')[1];
+                        if (domain && domain !== 'cisco.com') {
+                            return `Please use @cisco.com instead of @${domain}`;
+                        }
+                        return 'Please use your cisco email address';
+                    }
+                    
+                    return null;
+                }
+            });
+
+            if (newEmail) {
+                await vscode.workspace.getConfiguration('vibeAssistant').update('userEmail', newEmail, vscode.ConfigurationTarget.Global);
+                userService.clearCache();
+                // Don't trigger auto-detection popup - just confirm the configuration
+                console.log(`Email configuration updated: ${newEmail}`);
+                vscode.window.showInformationMessage(`✅ Email configured: ${newEmail}. You can now retrieve your tasks.`);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to configure email: ${(error as Error).message}`);
+        }
+    });
+
+    // Debug command to check user filtering
+    const debugUserFilterCommand = vscode.commands.registerCommand('specDrivenDevelopment.debugUserFilter', async () => {
+        try {
+            vscode.window.showInformationMessage('🔍 Checking user filter configuration...');
+            
+            // Get user email and username
+            const userEmail = await userService.getUserEmail();
+            const username = await userService.getUsernameFromEmail();
+            const userInfo = await userService.getUserInfo();
+            
+
+            
+            // Check manual email configuration
+            const manualEmail = vscode.workspace.getConfiguration('vibeAssistant').get<string>('userEmail');
+            const hasManualEmail = !!manualEmail;
+            
+            // Show debug information
+            const debugInfo = `
+🔍 User Filter Debug Information:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📧 Current Email: ${userEmail}
+👤 Username (from email): ${username}
+🎯 Email Source: ${userInfo.source}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+⚙️ Manual Email Configured: ${hasManualEmail ? '✅ Yes' : '❌ No'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 Status: ${userInfo.source === 'system' ? '❌ Email not configured - API calls blocked' : 
+    userInfo.source === 'manual' ? '✅ Manual email configured - API calls allowed' :
+    userInfo.source === 'git-config' ? '✅ Git config email retrieved - API calls allowed' : 
+    '✅ Email configured - API calls allowed'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${userInfo.source !== 'system' ? `🎯 Filter Query (WIP):
+WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━` : ''}
+� How to Configure Email:
+1. Use Command Palette: "Configure User Email"
+2. Or ensure Git is configured: git config --global user.email your@cisco.com
+3. Or set manual email: Settings → vibeAssistant.userEmail
+
+📋 Requirements:
+• Email must be cisco.com domain
+• Git config email will be auto-detected if available
+• Your email in Salesforce must match configured email
+• 'Assignee_through_VS__c' field should contain your username
+            `.trim();
+            
+            // Show in an output channel for better formatting
+            const outputChannel = vscode.window.createOutputChannel('User Filter Debug');
+            outputChannel.clear();
+            outputChannel.appendLine(debugInfo);
+            outputChannel.show();
+            
+            // Also show a summary message
+            const statusIcon = userInfo.source === 'system' ? '❌' : '✅';
+            vscode.window.showInformationMessage(
+                `${statusIcon} Email: ${userEmail} | Source: ${userInfo.source} - Check Output panel for details`
+            );
+            
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to debug user filter: ${(error as Error).message}`);
+        }
+    });
+
     // Register all commands
     context.subscriptions.push(
         analyzeCodeCommand,
@@ -1740,10 +2011,13 @@ function registerCommands(context: vscode.ExtensionContext) {
         refreshPromptsCommand,
         searchInstructionsCommand,
         searchPromptsCommand,
+        configureUserCommand,
+        debugUserFilterCommand,
         // New Spec Driven Development Panel Commands
         openPanelCommand,
         connectAWSCommand,
         refreshAWSConnectionCommand,
+        disconnectAWSCommand,
         getRealTimeAWSStatusCommand,
         getEnhancedAWSStatusCommand,
         listAWSSecretsCommand,
@@ -1755,6 +2029,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         loadSprintDetailsCommand,
         loadSprintsForTeamCommand,
         autoPopulateFromGitCommand,
+        configureUserForFeaturesCommand,
         submitFeedbackCommand,
         importTaskMasterCommand,
         checkDuplicateTaskMasterCommand,
@@ -1911,6 +2186,10 @@ export function deactivate() {
     if (awsService) {
         awsService.dispose();
         console.log('[SDD] Disposed awsService');
+    }
+    if (userService) {
+        userService.dispose();
+        console.log('[SDD] Disposed userService');
     }
     if (estimationParser) {
         estimationParser.dispose();

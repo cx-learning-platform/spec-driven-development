@@ -5,12 +5,12 @@
   "version": "1.0.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Relanto-LKM-POC/spec-driven-development.git"
+    "url": "https://github.com/cx-learning-platform/spec-driven-development.git"
   },
   "bugs": {
-    "url": "https://github.com/Relanto-LKM-POC/spec-driven-development/issues"
+    "url": "https://github.com/cx-learning-platform/spec-driven-development/issues"
   },
-  "homepage": "https://github.com/Relanto-LKM-POC/spec-driven-development#readme",
+  "homepage": "https://github.com/cx-learning-platform/spec-driven-development#readme",
   "publisher": "Gen-Ai-publisher",
   "license": "MIT",
   "icon": "icon.png",
@@ -98,6 +98,11 @@
         "category": "Spec Driven Development"
       },
       {
+        "command": "specDrivenDevelopment.disconnectAWS",
+        "title": "Disconnect from AWS",
+        "category": "Spec Driven Development"
+      },
+      {
         "command": "specDrivenDevelopment.listAWSSecrets",
         "title": "List AWS Secrets",
         "category": "Spec Driven Development"
@@ -132,11 +137,7 @@
         "title": "Clear Feature History",
         "category": "Spec Driven Development"
       },
-      {
-        "command": "specDrivenDevelopment.configureGitHubToken",
-        "title": "Configure GitHub Token",
-        "category": "Spec Driven Development"
-      },
+
       {
         "command": "specDrivenDevelopment.parseCopilotEstimation",
         "title": "Parse Copilot Estimation from Chat",
@@ -160,6 +161,11 @@
       {
         "command": "specDrivenDevelopment.applyWorkspacePrompts",
         "title": "Apply Workspace Contextual Prompts", 
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "vibeAssistant.configureUser",
+        "title": "Configure User Email",
         "category": "Spec Driven Development"
       }
     ],
@@ -308,7 +314,7 @@
         },
         "specDrivenDevelopment.salesforceSecretKeywords": {
           "type": "array",
-          "default": ["salesforce", "sf", "crm", "sales", "force"],
+          "default": ["lcp-devsecops-plugin", "sf", "crm", "sales", "force"],
           "description": "Keywords to search for when looking for Salesforce secrets (fallback if exact name not found)"
         },
         "specDrivenDevelopment.enableEstimationParsing": {
@@ -351,10 +357,11 @@
           "default": false,
           "description": "Show detailed information in notifications"
         },
-        "specDrivenDevelopment.githubToken": {
+
+        "vibeAssistant.userEmail": {
           "type": "string",
           "default": "",
-          "description": "GitHub Personal Access Token for creating issues (requires 'repo' or 'public_repo' scope)"
+          "description": "Cisco email address for JIRA ticket filtering (must be @cisco.com, auto-configured from GitHub API if empty)"
         },
         "specDrivenDevelopment.enableDebugLogging": {
           "type": "boolean",

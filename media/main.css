@@ -305,6 +305,16 @@
     background-color: var(--vscode-toolbar-hoverBackground);
 }
 
+.danger-button {
+    background-color: transparent;
+    color: var(--vscode-errorForeground);
+    border: 1px solid var(--vscode-errorForeground);
+}
+
+.danger-button:hover {
+    background-color: var(--vscode-inputValidation-errorBackground);
+}
+
 /* Input Styles */
 .input-group {
     margin-bottom: 15px;
