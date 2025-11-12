@@ -67,7 +67,7 @@ export class TaskService {
         
         // Concurrent request protection - reuse existing promise if another request is in progress
         if (TaskService.tokenRequestMutex.has(requestKey)) {
-            console.log('Token request already in progress, waiting for existing request...');
+            console.log('[SDD:Task] INFO | Token request already in progress, waiting for existing request...');
             return await TaskService.tokenRequestMutex.get(requestKey)!;
         }
 
@@ -110,7 +110,7 @@ export class TaskService {
                                      lastError.message.includes('ECONNRESET') ||
                                      lastError.message.includes('ENOTFOUND');
 
-                console.log(`Token request attempt ${attempt + 1} failed:`, {
+                console.log(`[SDD:Task] INFO | Token request attempt ${attempt + 1} failed:`, {
                     error: lastError.message,
                     is401Error,
                     isNetworkError,
@@ -119,7 +119,7 @@ export class TaskService {
 
                 // Handle 401 errors - clear cache and retry once
                 if (is401Error && attempt === 0) {
-                    console.log('401 detected, clearing token cache and retrying...');
+                    console.log('[SDD:Task] INFO | 401 detected, clearing token cache and retrying...');
                     
                     // Clear the cached token in JiraService
                     (this.jiraService as any).cachedAuthToken = undefined;
@@ -135,7 +135,7 @@ export class TaskService {
                     const jitter = Math.random() * 0.1 * delay; // 10% jitter
                     const finalDelay = delay + jitter;
                     
-                    console.log(`Network error detected, retrying after ${Math.round(finalDelay)}ms...`);
+                    console.log(`[SDD:Task] INFO | Network error detected, retrying after ${Math.round(finalDelay)}ms...`);
                     await this.sleep(finalDelay);
                     continue;
                 }
@@ -158,7 +158,7 @@ export class TaskService {
 
         // All retries exhausted
         const errorMessage = `Failed to obtain Salesforce token after ${maxRetries} attempts: ${lastError?.message}`;
-        console.error(errorMessage);
+        console.error(`[SDD:Task] ERROR | ${errorMessage}`);
         throw new Error(errorMessage);
     }
 
@@ -209,7 +209,7 @@ export class TaskService {
                 `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Status__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
-            console.log('WIP tickets Query:', query);
+            console.log('[SDD:Task] INFO | WIP tickets Query:', query);
 
             const response = await fetch(getSalesforceQueryUrl(query), {
                 method: 'GET',
@@ -245,14 +245,14 @@ export class TaskService {
                     totalCount = countData.totalSize || 0;
                 }
             } catch (error) {
-                console.warn('Failed to get WIP total count, using records length');
+                console.warn('[SDD:Task] WARN | Failed to get WIP total count, using records length');
             }
 
             // Filter out locally cleaned up tasks (client-side only)
             const cleanedUpTasks = this.context.workspaceState.get<string[]>('cleanedUpTaskIds', []);
             const filteredTasks = (data.records || []).filter((task: Task) => !cleanedUpTasks.includes(task.Id));
             
-            console.log(`Retrieved ${data.records?.length || 0} WIP tickets, ${filteredTasks.length} after filtering ${cleanedUpTasks.length} locally cleaned up tasks (total count: ${totalCount})`);
+            console.log(`[SDD:Task] INFO | Retrieved ${data.records?.length || 0} WIP tickets, ${filteredTasks.length} after filtering ${cleanedUpTasks.length} locally cleaned up tasks (total count: ${totalCount})`);
 
             return {
                 tasks: filteredTasks,
@@ -260,7 +260,7 @@ export class TaskService {
                 hasMore: (offset + limit) < totalCount
             };
         } catch (error) {
-            console.error('Error retrieving WIP tickets:', error);
+            console.error('[SDD:Task] ERROR | Error retrieving WIP tickets:', error);
             throw error;
         }
     }
@@ -305,7 +305,7 @@ export class TaskService {
                 `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
-            console.log('Running tasks main query:', decodeURIComponent(query));
+            console.log('[SDD:Task] INFO | Running tasks main query:', decodeURIComponent(query));
 
             const response = await fetch(getSalesforceQueryUrl(query), {
                 method: 'GET',
@@ -326,7 +326,7 @@ export class TaskService {
                 `SELECT COUNT() FROM Feedback__c ${whereClause}`
             );
             
-            console.log('Running tasks count query:', decodeURIComponent(countQuery));
+            console.log('[SDD:Task] INFO | Running tasks count query:', decodeURIComponent(countQuery));
             
             let totalCount = data.records?.length || 0;
             try {
@@ -341,12 +341,12 @@ export class TaskService {
                 if (countResponse.ok) {
                     const countData = await countResponse.json();
                     totalCount = countData.totalSize || 0;
-                    console.log(`Running tasks - Total count: ${totalCount}, Records fetched: ${data.records?.length || 0}, Offset: ${offset}, Limit: ${limit}`);
+                    console.log(`[SDD:Task] INFO | Running tasks - Total count: ${totalCount}, Records fetched: ${data.records?.length || 0}, Offset: ${offset}, Limit: ${limit}`);
                 } else {
-                    console.warn('Running tasks count query failed:', countResponse.status, countResponse.statusText);
+                    console.warn('[SDD:Task] WARN | Running tasks count query failed:', countResponse.status, countResponse.statusText);
                 }
             } catch (error) {
-                console.warn('Failed to get total count for running tasks, using records length:', error);
+                console.warn('[SDD:Task] WARN | Failed to get total count for running tasks, using records length:', error);
             }
 
             return {
@@ -355,7 +355,7 @@ export class TaskService {
                 hasMore: (offset + limit) < totalCount
             };
         } catch (error) {
-            console.error('Error retrieving all tickets:', error);
+            console.error('[SDD:Task] ERROR | Error retrieving all tickets:', error);
             throw error;
         }
     }
@@ -434,10 +434,10 @@ export class TaskService {
                     totalCount = countData.totalSize || 0;
                 }
             } catch (error) {
-                console.warn('Failed to get Done tickets total count, using records length');
+                console.warn('[SDD:Task] WARN | Failed to get Done tickets total count, using records length');
             }
 
-            console.log(`Retrieved ${data.records?.length || 0} Done tickets from Salesforce (total count: ${totalCount})`);
+            console.log(`[SDD:Task] INFO | Retrieved ${data.records?.length || 0} Done tickets from Salesforce (total count: ${totalCount})`);
 
             return {
                 tasks: data.records || [],
@@ -445,7 +445,7 @@ export class TaskService {
                 hasMore: (offset + limit) < totalCount
             };
         } catch (error) {
-            console.error('Error retrieving Done tickets:', error);
+            console.error('[SDD:Task] ERROR | Error retrieving Done tickets:', error);
             throw error;
         }
     }
@@ -500,7 +500,7 @@ export class TaskService {
                 updatePayload.AI_Adopted__c = updates.aiAdopted;
             }
 
-            console.log('Updating task with payload:', updatePayload);
+            console.log('[SDD:Task] INFO | Updating task with payload:', updatePayload);
 
             const response = await fetch(getSalesforceFeedbackUrl(taskId), {
                 method: 'PATCH',
@@ -513,13 +513,13 @@ export class TaskService {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error('PATCH request failed:', response.status, errorText);
+                console.error('[SDD:Task] ERROR | PATCH request failed:', response.status, errorText);
                 throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
             }
 
             return { success: true, message: 'Task updated successfully', taskId };
         } catch (error) {
-            console.error('Error updating task:', error);
+            console.error('[SDD:Task] ERROR | Error updating task:', error);
             throw error;
         }
     }
@@ -544,14 +544,14 @@ export class TaskService {
             });
 
             if (!response.ok) {
-                console.warn('Failed to fetch epics, using empty list');
+                console.warn('[SDD:Task] WARN | Failed to fetch epics, using empty list');
                 return [];
             }
 
             const data = await response.json();
             return data.records || [];
         } catch (error) {
-            console.warn('Error fetching epics:', error);
+            console.warn('[SDD:Task] WARN | Error fetching epics:', error);
             return [];
         }
     }
@@ -577,7 +577,7 @@ export class TaskService {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
         } catch (error) {
-            console.error('Error deleting task:', error);
+            console.error('[SDD:Task] ERROR | Error deleting task:', error);
             throw error;
         }
     }
@@ -601,7 +601,7 @@ export class TaskService {
                 resolution: 'Done'
             };
             
-            console.log('Marking task as Done in Salesforce:', task.Id, updates);
+            console.log('[SDD:Task] INFO | Marking task as Done in Salesforce:', task.Id, updates);
             
             // 4. Update task in Salesforce
             await this.updateTask(task.Id, updates);
@@ -613,10 +613,10 @@ export class TaskService {
                 await this.context.workspaceState.update('cleanedUpTaskIds', cleanedUpTasks);
             }
             
-            console.log('Task successfully marked as Done:', task.Id);
+            console.log('[SDD:Task] INFO | Task successfully marked as Done:', task.Id);
             return { success: true, message: 'Task marked as Done successfully' };
         } catch (error) {
-            console.error('Error marking task as done:', error);
+            console.error('[SDD:Task] ERROR | Error marking task as done:', error);
             throw error;
         }
     }
@@ -633,7 +633,7 @@ export class TaskService {
                 // as they represent historical data
             };
             
-            console.log('Restoring task in Salesforce:', taskId, updates);
+            console.log('[SDD:Task] INFO | Restoring task in Salesforce:', taskId, updates);
             await this.updateTask(taskId, updates);
             
             // Also remove from local state if it was there
@@ -641,10 +641,10 @@ export class TaskService {
             const updatedCleanedUpTasks = cleanedUpTasks.filter(id => id !== taskId);
             await this.context.workspaceState.update('cleanedUpTaskIds', updatedCleanedUpTasks);
             
-            console.log('Task successfully restored:', taskId);
+            console.log('[SDD:Task] INFO | Task successfully restored:', taskId);
             return { success: true, message: 'Task restored successfully' };
         } catch (error) {
-            console.error('Error restoring task:', error);
+            console.error('[SDD:Task] ERROR | Error restoring task:', error);
             throw error;
         }
     }

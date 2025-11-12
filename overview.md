@@ -148,7 +148,6 @@ your-project/
 - `specDrivenDevelopment.awsProfile` - AWS CLI profile (empty = default profile)
 - `specDrivenDevelopment.awsRegion` - AWS region (empty = auto-detect)
 - `specDrivenDevelopment.salesforceSecretName` - Secret name in AWS Secrets Manager (default: "salesforce")
-- `specDrivenDevelopment.salesforceSecretKeywords` - Keywords to search for secrets (default: ["salesforce", "sf", "crm"])
 
 ## 🔧 System Requirements
 

@@ -69,7 +69,7 @@ export class JiraService {
                 const nodeFetch = await import('node-fetch');
                 fetch = nodeFetch.default;
             } catch (error) {
-                console.error('Failed to import node-fetch:', error);
+                console.error('[SDD:JIRA] ERROR | Failed to import node-fetch:', error);
                 throw new Error('HTTP client not available');
             }
         }
@@ -147,11 +147,11 @@ export class JiraService {
             this.cachedAuthToken = authData.access_token;
             this.tokenExpiry = new Date(Date.now() + CONFIG.cache.tokenTTL); // 30 minutes from now
 
-            console.log(`Salesforce authentication successful, token cached for ${CONFIG.cache.tokenTTL / (60 * 1000)} minutes`);
+            console.log(`[SDD:JIRA] INFO | Salesforce authentication successful, token cached for ${CONFIG.cache.tokenTTL / (60 * 1000)} minutes`);
             return authData.access_token;
 
         } catch (error) {
-            console.error('Salesforce authentication failed:', error);
+            console.error('[SDD:JIRA] ERROR | Salesforce authentication failed:', error);
             throw new Error(`Failed to authenticate with Salesforce: ${(error as Error).message}`);
         }
     }
@@ -186,7 +186,7 @@ export class JiraService {
             return queryData.records[0];
 
         } catch (error) {
-            console.error('Epic ticket matching failed:', error);
+            console.error('[SDD:JIRA] ERROR | Epic ticket matching failed:', error);
             throw new Error(`Failed to match Epic ticket: ${(error as Error).message}`);
         }
     }
@@ -224,7 +224,7 @@ export class JiraService {
             }
 
         } catch (error) {
-            console.error('Ticket update failed:', error);
+            console.error('[SDD:JIRA] ERROR | Ticket update failed:', error);
             throw new Error(`Failed to update ticket: ${(error as Error).message}`);
         }
     }
@@ -306,7 +306,7 @@ export class JiraService {
             };
 
         } catch (error) {
-            console.error('JIRA update failed:', error);
+            console.error('[SDD:JIRA] ERROR | JIRA update failed:', error);
             return {
                 success: false,
                 jiraId: request.jiraId,

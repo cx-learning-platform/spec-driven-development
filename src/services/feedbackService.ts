@@ -104,7 +104,7 @@ export class FeedbackService {
         
         // Concurrent request protection - reuse existing promise if another request is in progress
         if (FeedbackService.tokenRequestMutex.has(requestKey)) {
-            console.log('Token request already in progress for FeedbackService, waiting for existing request...');
+            console.log('[SDD:Feedback] INFO | Token request already in progress for FeedbackService, waiting for existing request...');
             return await FeedbackService.tokenRequestMutex.get(requestKey)!;
         }
 
@@ -147,7 +147,7 @@ export class FeedbackService {
                                      lastError.message.includes('ECONNRESET') ||
                                      lastError.message.includes('ENOTFOUND');
 
-                console.log(`Token request attempt ${attempt + 1} failed (FeedbackService):`, {
+                console.log(`[SDD:Feedback] INFO | Token request attempt ${attempt + 1} failed (FeedbackService):`, {
                     error: lastError.message,
                     is401Error,
                     isNetworkError,
@@ -156,7 +156,7 @@ export class FeedbackService {
 
                 // Handle 401 errors - clear cache and retry once
                 if (is401Error && attempt === 0) {
-                    console.log('401 detected in FeedbackService, clearing token cache and retrying...');
+                    console.log('[SDD:Feedback] INFO | 401 detected in FeedbackService, clearing token cache and retrying...');
                     
                     // Clear the cached token in JiraService
                     (this.jiraService as any).cachedAuthToken = undefined;
@@ -172,7 +172,7 @@ export class FeedbackService {
                     const jitter = Math.random() * 0.1 * delay; // 10% jitter
                     const finalDelay = delay + jitter;
                     
-                    console.log(`Network error detected in FeedbackService, retrying after ${Math.round(finalDelay)}ms...`);
+                    console.log(`[SDD:Feedback] INFO | Network error detected in FeedbackService, retrying after ${Math.round(finalDelay)}ms...`);
                     await this.sleep(finalDelay);
                     continue;
                 }
@@ -195,7 +195,7 @@ export class FeedbackService {
 
         // All retries exhausted
         const errorMessage = `Failed to obtain Salesforce token after ${maxRetries} attempts: ${lastError?.message}`;
-        console.error(errorMessage);
+        console.error(`[SDD:Feedback] ERROR | ${errorMessage}`);
         throw new Error(errorMessage);
     }
 
@@ -243,10 +243,10 @@ export class FeedbackService {
             
             if (initiativeField && initiativeField.referenceTo && initiativeField.referenceTo.length > 0) {
                 const referencedObject = initiativeField.referenceTo[0];
-                console.log(`Initiative__c field references: ${referencedObject}`);
+                console.log(`[SDD:Feedback] INFO | Initiative__c field references: ${referencedObject}`);
                 
                 // Now query the correct object
-                const response = await fetchWithTimeout(getSalesforceQueryUrl(`SELECT+Id%2CName+FROM+${referencedObject}`), {
+                const response = await fetchWithTimeout(getSalesforceQueryUrl(`SELECT+Id%2CName+FROM+${referencedObject}+WHERE+Updated_Initiative__c+%3D+true`), {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
@@ -265,7 +265,7 @@ export class FeedbackService {
                 }));
             } else {
                 // Fallback to CX_Initiative__c based on discovered field relationship
-                const response = await fetchWithTimeout(getSalesforceQueryUrl(`SELECT+Id%2CName+FROM+CX_Initiative__c`), {
+                const response = await fetchWithTimeout(getSalesforceQueryUrl(`SELECT+Id%2CName+FROM+CX_Initiative__c+WHERE+Updated_Initiative__c+%3D+true`), {
                     method: 'GET',
                     headers: {
                         'Authorization': `Bearer ${accessToken}`,
@@ -284,7 +284,7 @@ export class FeedbackService {
                 }));
             }
         } catch (error) {
-            console.error('Failed to fetch initiatives:', error);
+            console.error('[SDD:Feedback] ERROR | Failed to fetch initiatives:', error);
             
             // Handle different types of errors with user-friendly messages
             if (error instanceof Error) {
@@ -335,7 +335,7 @@ export class FeedbackService {
             if (describeResponse.ok) {
                 const describeData = await describeResponse.json();
                 hasInitiativeField = describeData.fields.some((field: any) => field.name === 'Initiative__c');
-                console.log(`Epic__c has Initiative__c field: ${hasInitiativeField}`);
+                console.log(`[SDD:Feedback] INFO | Epic__c has Initiative__c field: ${hasInitiativeField}`);
             }
 
             // Build the SOQL query based on whether Initiative field exists
@@ -345,7 +345,7 @@ export class FeedbackService {
             }
             query += `+FROM+Epic__c+ORDER+BY+CreatedDate+DESC`;
             
-            console.log(`Epic query: ${query}`);
+            console.log(`[SDD:Feedback] INFO | Epic query: ${query}`);
             const response = await fetch(getSalesforceQueryUrl(query), {
                 method: 'GET',
                 headers: {
@@ -366,7 +366,7 @@ export class FeedbackService {
                 initiativeId: record.Initiative__c || null // Handle missing Initiative field
             }));
         } catch (error) {
-            console.error('Failed to fetch epics:', error);
+            console.error('[SDD:Feedback] ERROR | Failed to fetch epics:', error);
             throw new Error(`Failed to fetch epics: ${(error as Error).message}`);
         }
     }
@@ -393,7 +393,7 @@ export class FeedbackService {
             // Query Sprint_Jira_Details__c object, ordered by CreatedDate DESC, limited to 10
             const query = `SELECT+Id%2CName+FROM+Sprint_Jira_Details__c+ORDER+BY+CreatedDate+DESC+LIMIT+10`;
             
-            console.log(`Sprint query: ${query}`);
+            console.log(`[SDD:Feedback] INFO | Sprint query: ${query}`);
             const response = await fetch(getSalesforceQueryUrl(query), {
                 method: 'GET',
                 headers: {
@@ -412,7 +412,7 @@ export class FeedbackService {
                 name: record.Name
             }));
         } catch (error) {
-            console.error('Failed to fetch sprint details:', error);
+            console.error('[SDD:Feedback] ERROR | Failed to fetch sprint details:', error);
             throw new Error(`Failed to fetch sprint details: ${(error as Error).message}`);
         }
     }
@@ -423,20 +423,20 @@ export class FeedbackService {
      */
     public async getSprintsForTeam(teamName: string): Promise<Array<{ id: string; name: string; recommended?: boolean }>> {
         try {
-            console.log(`Getting sprints for team: ${teamName}`);
+            console.log(`[SDD:Feedback] INFO | Getting sprints for team: ${teamName}`);
             
             // Extract team prefix from team name
             // "GenAI - LCEA" → "GENAI"
             // "DevOps - LCEA" → "DEVOPS"
             // "DevSecOps - LCEA" → "DEVSECOPS"
             const teamPrefix = this.extractTeamPrefix(teamName);
-            console.log(`Extracted team prefix: ${teamPrefix}`);
+            console.log(`[SDD:Feedback] INFO | Extracted team prefix: ${teamPrefix}`);
 
             // Get all sprints (API 12) - already sorted by CreatedDate DESC, limited to 10
             const allSprints = await this.getSprintDetails();
             
             if (!allSprints || allSprints.length === 0) {
-                console.log('No sprints found');
+                console.log('[SDD:Feedback] INFO | No sprints found');
                 return [];
             }
 
@@ -446,7 +446,7 @@ export class FeedbackService {
                 return sprintPrefix === teamPrefix;
             });
 
-            console.log(`Found ${matchingSprints.length} sprints matching team prefix "${teamPrefix}"`);
+            console.log(`[SDD:Feedback] INFO | Found ${matchingSprints.length} sprints matching team prefix "${teamPrefix}"`);
 
             // Get the recommended sprint (first matching sprint, which is the latest)
             const recommendedSprint = matchingSprints.length > 0 ? matchingSprints[0] : null;
@@ -459,13 +459,13 @@ export class FeedbackService {
             }));
 
         } catch (error) {
-            console.error('Error getting sprints for team:', error);
+            console.error('[SDD:Feedback] ERROR | Error getting sprints for team:', error);
             // Fallback to all sprints
             try {
                 const allSprints = await this.getSprintDetails();
                 return allSprints.map(s => ({ id: s.id, name: s.name }));
             } catch (fallbackError) {
-                console.error('Fallback sprint loading also failed:', fallbackError);
+                console.error('[SDD:Feedback] ERROR | Fallback sprint loading also failed:', fallbackError);
                 return [];
             }
         }
@@ -584,7 +584,7 @@ export class FeedbackService {
                 salesforcePayload.Jira_Sprint_Details__c = feedbackData.sprintId;
             }
 
-            console.log('Submitting to Salesforce:', salesforcePayload);
+            console.log('[SDD:Feedback] INFO | Submitting to Salesforce:', salesforcePayload);
 
             const response = await fetch(getSalesforceApiUrl(CONFIG.api.endpoints.feedback + '/'), {
                 method: 'POST',
@@ -600,11 +600,11 @@ export class FeedbackService {
                 result = await response.json();
             } catch (parseError) {
                 const responseText = await response.text();
-                console.error('Failed to parse Salesforce response:', responseText);
+                console.error('[SDD:Feedback] ERROR | Failed to parse Salesforce response:', responseText);
                 throw new Error(`Invalid response from Salesforce: ${response.status} ${response.statusText}`);
             }
 
-            console.log('Salesforce response:', { status: response.status, result });
+            console.log('[SDD:Feedback] INFO | Salesforce response:', { status: response.status, result });
 
             if (response.ok && result.success) {
                 let jiraTicketNumber = result.id; // Fallback to Salesforce ID
@@ -661,8 +661,8 @@ export class FeedbackService {
                 };
             } else {
                 // More detailed error handling
-                console.error('Detailed Salesforce error:', JSON.stringify(result, null, 2));
-                console.error('Detailed Salesforce error (raw):', result);
+                console.error('[SDD:Feedback] ERROR | Detailed Salesforce error:', JSON.stringify(result, null, 2));
+                console.error('[SDD:Feedback] ERROR | Detailed Salesforce error (raw):', result);
                 
                 let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
                 if (Array.isArray(result) && result.length > 0) {
@@ -674,7 +674,7 @@ export class FeedbackService {
                         return JSON.stringify(err);
                     }).join('; ');
                     errorMsg = errors; // Use the detailed error message directly
-                    console.error('Formatted error message:', errorMsg);
+                    console.error('[SDD:Feedback] ERROR | Formatted error message:', errorMsg);
                 } else if (result && result.errors && result.errors.length > 0) {
                     const errors = result.errors.map((err: any) => `${err.statusCode}: ${err.message}`).join(', ');
                     errorMsg = errors;
@@ -686,7 +686,7 @@ export class FeedbackService {
             }
 
         } catch (error) {
-            console.error('Salesforce submission failed:', error);
+            console.error('[SDD:Feedback] ERROR | Salesforce submission failed:', error);
             return {
                 success: false,
                 message: `Failed to submit to Salesforce: ${(error as Error).message}`,
@@ -712,7 +712,7 @@ export class FeedbackService {
             await this.context.globalState.update('specDrivenDevelopment.feedbackDrafts', updatedDrafts);
 
         } catch (error) {
-            console.error('Failed to save feedback draft:', error);
+            console.error('[SDD:Feedback] ERROR | Failed to save feedback draft:', error);
         }
     }
 
@@ -732,7 +732,7 @@ export class FeedbackService {
             const updatedDrafts = drafts.filter(draft => draft.id !== draftId);
             await this.context.globalState.update('specDrivenDevelopment.feedbackDrafts', updatedDrafts);
         } catch (error) {
-            console.error('Failed to delete feedback draft:', error);
+            console.error('[SDD:Feedback] ERROR | Failed to delete feedback draft:', error);
         }
     }
 
@@ -827,7 +827,7 @@ export class FeedbackService {
             await this.context.globalState.update('specDrivenDevelopment.feedbackHistory', updatedHistory);
 
         } catch (error) {
-            console.error('Failed to cache feedback submission:', error);
+            console.error('[SDD:Feedback] ERROR | Failed to cache feedback submission:', error);
         }
     }
 
@@ -864,7 +864,7 @@ export class FeedbackService {
      */
     public async getApplicationFromRepo(repoName: string): Promise<{ id: string; name: string; gitUrl: string } | null> {
         try {
-            console.log('Getting application for repo:', repoName);
+            console.log('[SDD:Feedback] INFO | Getting application for repo:', repoName);
             const token = await this.getAccessTokenWithRetryAndProtection();
 
             // API 14: Query Git_Details__c
@@ -896,15 +896,15 @@ export class FeedbackService {
                     name: record.CX_Application_Name__r?.Name || '',
                     gitUrl: record.Git_URL__c || ''
                 };
-                console.log('Found application:', result);
+                console.log('[SDD:Feedback] INFO | Found application:', result);
                 return result;
             }
 
-            console.log('No application found for repo:', repoName);
+            console.log('[SDD:Feedback] INFO | No application found for repo:', repoName);
             return null;
 
         } catch (error) {
-            console.error('Error getting application from repo:', error);
+            console.error('[SDD:Feedback] ERROR | Error getting application from repo:', error);
             return null;
         }
     }
@@ -915,7 +915,7 @@ export class FeedbackService {
      */
     public async getInitiativesFromApplication(applicationName: string): Promise<Array<{ id: string; name: string; jiraTeam: string }>> {
         try {
-            console.log('Getting initiatives for application:', applicationName);
+            console.log('[SDD:Feedback] INFO | Getting initiatives for application:', applicationName);
             const token = await this.getAccessTokenWithRetryAndProtection();
 
             // API 15: Query App_Items__c
@@ -946,15 +946,15 @@ export class FeedbackService {
                     jiraTeam: record.Initiative__r?.Jira_Team__c || ''
                 })).filter((init: any) => init.id && init.name); // Filter out invalid records
 
-                console.log(`Found ${initiatives.length} initiatives for application`);
+                console.log(`[SDD:Feedback] INFO | Found ${initiatives.length} initiatives for application`);
                 return initiatives;
             }
 
-            console.log('No initiatives found for application:', applicationName);
+            console.log('[SDD:Feedback] INFO | No initiatives found for application:', applicationName);
             return [];
 
         } catch (error) {
-            console.error('Error getting initiatives from application:', error);
+            console.error('[SDD:Feedback] ERROR | Error getting initiatives from application:', error);
             return [];
         }
     }
@@ -965,15 +965,16 @@ export class FeedbackService {
      */
     public async getEpicsFromInitiative(jiraTeam: string): Promise<Array<{ id: string; name: string; teamName: string; status: string }>> {
         try {
-            console.log('Getting epics for Jira team:', jiraTeam);
+            console.log('[SDD:Feedback] INFO | Getting epics for Jira team:', jiraTeam);
             const token = await this.getAccessTokenWithRetryAndProtection();
 
             // API 16: Query Epic__c
             const query = encodeURIComponent(
                 `SELECT id, name, Team_Name__c, Status__c ` +
                 `FROM Epic__c ` +
-                `WHERE Team_Name__c LIKE '%${jiraTeam.replace(/'/g, "\\'")}%' ` +
-                `AND Status__c != 'done' ` +
+                `WHERE Status__c != 'Done' ` +
+                `AND Updated_Initiative__c = true ` +
+                `AND Team_Name__c LIKE '%${jiraTeam.replace(/'/g, "\\'")}%' ` +
                 `ORDER BY CreatedDate DESC`
             );
 
@@ -999,15 +1000,15 @@ export class FeedbackService {
                     status: record.Status__c || ''
                 }));
 
-                console.log(`Found ${epics.length} epics for Jira team`);
+                console.log(`[SDD:Feedback] INFO | Found ${epics.length} epics for Jira team`);
                 return epics;
             }
 
-            console.log('No epics found for Jira team:', jiraTeam);
+            console.log('[SDD:Feedback] INFO | No epics found for Jira team:', jiraTeam);
             return [];
 
         } catch (error) {
-            console.error('Error getting epics from initiative:', error);
+            console.error('[SDD:Feedback] ERROR | Error getting epics from initiative:', error);
             return [];
         }
     }
@@ -1032,13 +1033,13 @@ export class FeedbackService {
         fallbackReason?: string;
     }> {
         try {
-            console.log('Starting auto-population from Git repository...');
+            console.log('[SDD:Feedback] INFO | Starting auto-population from Git repository...');
 
             // Step 1: Get repository name from workspace
             const repoName = await GitService.getRepositoryName();
             
             if (!repoName) {
-                console.log('Could not detect Git repository in workspace');
+                console.log('[SDD:Feedback] INFO | Could not detect Git repository in workspace');
                 return {
                     success: false,
                     initiatives: [],
@@ -1049,13 +1050,13 @@ export class FeedbackService {
                 };
             }
 
-            console.log(`Detected repository: ${repoName}`);
+            console.log(`[SDD:Feedback] INFO | Detected repository: ${repoName}`);
 
             // Step 2: Get Application from Repository (API 14)
             const application = await this.getApplicationFromRepo(repoName);
             
             if (!application || !application.name) {
-                console.log('Repository not found in Salesforce');
+                console.log('[SDD:Feedback] INFO | Repository not found in Salesforce');
                 
                 // Show notification to user
                 vscode.window.showWarningMessage(
@@ -1073,13 +1074,13 @@ export class FeedbackService {
                 };
             }
 
-            console.log(`Found application: ${application.name}`);
+            console.log(`[SDD:Feedback] INFO | Found application: ${application.name}`);
 
             // Step 3: Get Initiatives from Application (API 15)
             const initiatives = await this.getInitiativesFromApplication(application.name);
             
             if (initiatives.length === 0) {
-                console.log('No initiatives found for application');
+                console.log('[SDD:Feedback] INFO | No initiatives found for application');
                 return {
                     success: false,
                     repoName,
@@ -1092,14 +1093,14 @@ export class FeedbackService {
                 };
             }
 
-            console.log(`Found ${initiatives.length} initiative(s)`);
+            console.log(`[SDD:Feedback] INFO | Found ${initiatives.length} initiative(s)`);
 
             // Step 4: Select recommended initiative (first one or apply business logic)
             const recommendedInitiative = initiatives[0];
             const jiraTeam = recommendedInitiative.jiraTeam;
 
             if (!jiraTeam) {
-                console.log('No Jira team found for initiative');
+                console.log('[SDD:Feedback] INFO | No Jira team found for initiative');
                 return {
                     success: true,
                     repoName,
@@ -1114,20 +1115,20 @@ export class FeedbackService {
                 };
             }
 
-            console.log(`Recommended initiative: ${recommendedInitiative.name} (Team: ${jiraTeam})`);
+            console.log(`[SDD:Feedback] INFO | Recommended initiative: ${recommendedInitiative.name} (Team: ${jiraTeam})`);
 
             // Step 5: Get Epics from Jira Team (API 16)
             const epics = await this.getEpicsFromInitiative(jiraTeam);
             
-            console.log(`Found ${epics.length} epic(s) for team`);
+            console.log(`[SDD:Feedback] INFO | Found ${epics.length} epic(s) for team`);
 
             // Step 6: Get Sprints for Jira Team
             const sprints = await this.getSprintsForTeam(jiraTeam);
             const recommendedSprint = sprints.find(s => s.recommended);
             
-            console.log(`Found ${sprints.length} sprint(s) for team`);
+            console.log(`[SDD:Feedback] INFO | Found ${sprints.length} sprint(s) for team`);
             if (recommendedSprint) {
-                console.log(`Recommended sprint: ${recommendedSprint.name}`);
+                console.log(`[SDD:Feedback] INFO | Recommended sprint: ${recommendedSprint.name}`);
             }
 
             // Step 7: Return complete result
@@ -1147,7 +1148,7 @@ export class FeedbackService {
             };
 
         } catch (error) {
-            console.error('Error in auto-population from Git:', error);
+            console.error('[SDD:Feedback] ERROR | Error in auto-population from Git:', error);
             return {
                 success: false,
                 initiatives: [],

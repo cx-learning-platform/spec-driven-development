@@ -25,35 +25,35 @@ export class UserService {
         }
 
         // Step 1: Check manual configuration first (highest priority)
-        // Once set in vibeAssistant.userEmail, use it directly
-        const manualEmail = vscode.workspace.getConfiguration('vibeAssistant').get<string>('userEmail');
+        // Once set in specDrivenDevelopment.userEmail, use it directly
+        const manualEmail = vscode.workspace.getConfiguration('specDrivenDevelopment').get<string>('userEmail');
         if (manualEmail && this.isValidEmail(manualEmail) && this.isCiscoEmail(manualEmail)) {
-            console.log('[Manual Email] Using configured email');
+            console.log('[SDD:User] INFO | Using configured email');
             this.cachedUserInfo = {
                 email: manualEmail,
                 source: 'manual'
             };
             return manualEmail;
         } else if (manualEmail && this.isValidEmail(manualEmail) && !this.isCiscoEmail(manualEmail)) {
-            console.warn(`Manual email ${manualEmail} is not a cisco address - trying Git config instead`);
+            console.warn(`[SDD:User] WARN | Manual email ${manualEmail} is not a cisco address - trying Git config instead`);
         }
 
         // Step 2: Try Git configuration (no API calls needed)
-        console.log('[Git Config] Trying Git user configuration...');
+        console.log('[SDD:User] INFO | Trying Git user configuration...');
         try {
             const gitEmail = await this.getGitUserEmail();
             if (gitEmail && this.isValidEmail(gitEmail)) {
                 if (this.isCiscoEmail(gitEmail)) {
-                    console.log('[Git Config] Valid @cisco.com email found, auto-configuring...', gitEmail);
+                    console.log('[SDD:User] INFO | Valid @cisco.com email found, auto-configuring...', gitEmail);
                     
                     // AUTO-SAVE to VS Code settings (prevents future Git config checks)
-                    await vscode.workspace.getConfiguration('vibeAssistant').update(
+                    await vscode.workspace.getConfiguration('specDrivenDevelopment').update(
                         'userEmail', 
                         gitEmail, 
                         vscode.ConfigurationTarget.Global
                     );
                     
-                    console.log('[Git Config] ✅ Email auto-configured from Git settings!');
+                    console.log('[SDD:User] INFO | ✅ Email auto-configured from Git settings!');
                     this.cachedUserInfo = {
                         email: gitEmail,
                         source: 'git-config'
@@ -66,19 +66,19 @@ export class UserService {
                     
                     return gitEmail;
                 } else {
-                    console.warn(`[Git Config] Found Git email "${gitEmail}" but it's not @cisco.com - ignoring`);
+                    console.warn(`[SDD:User] WARN | Found Git email "${gitEmail}" but it's not @cisco.com - ignoring`);
                 }
             } else if (gitEmail) {
-                console.warn(`[Git Config] Found Git email "${gitEmail}" but it's not valid format - ignoring`);
+                console.warn(`[SDD:User] WARN | Found Git email "${gitEmail}" but it's not valid format - ignoring`);
             } else {
-                console.log('[Git Config] No Git email found in configuration');
+                console.log('[SDD:User] INFO | No Git email found in configuration');
             }
         } catch (error) {
-            console.warn('Failed to get Git user email:', error);
+            console.warn('[SDD:User] WARN | Failed to get Git user email:', error);
         }
 
         // Step 3: No Git config found or not @cisco.com, prompt for manual configuration
-        console.log('[Auto-Config] No valid Git email found, prompting for manual configuration...');
+        console.log('[SDD:User] INFO | No valid Git email found, prompting for manual configuration...');
         
         // Show prompt with action button
         const shouldConfigure = await vscode.window.showWarningMessage(
@@ -90,10 +90,10 @@ export class UserService {
         
         if (shouldConfigure === 'Configure Email Now') {
             // Open the configure email command
-            vscode.commands.executeCommand('vibeAssistant.configureUser');
+            vscode.commands.executeCommand('specDrivenDevelopment.configureUser');
         } else if (shouldConfigure === 'Open Settings') {
             // Open VS Code settings directly to the email configuration
-            vscode.commands.executeCommand('workbench.action.openSettings', 'vibeAssistant.userEmail');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'specDrivenDevelopment.userEmail');
         }
 
         // Return placeholder (will block API calls until properly configured)
@@ -133,11 +133,11 @@ export class UserService {
                             const emailMatch = configText.match(/^\s*email\s*=\s*(.+)$/m);
                             if (emailMatch && emailMatch[1]) {
                                 const email = emailMatch[1].trim();
-                                console.log('Found Git config email:', email);
+                                console.log('[SDD:User] INFO | Found Git config email:', email);
                                 return email;
                             }
                         } catch (error) {
-                            console.warn('Could not read .git/config file:', error);
+                            console.warn('[SDD:User] WARN | Could not read .git/config file:', error);
                         }
                     }
                 }
@@ -155,11 +155,11 @@ export class UserService {
                 return gitConfigEmail;
             }
 
-            console.log('No Git user email found in configuration');
+            console.log('[SDD:User] INFO | No Git user email found in configuration');
             return null;
             
         } catch (error) {
-            console.error('Failed to get Git user email:', error);
+            console.error('[SDD:User] ERROR | Failed to get Git user email:', error);
             return null;
         }
     }
@@ -180,14 +180,14 @@ export class UserService {
             
             const email = stdout.trim();
             if (email && this.isValidEmail(email)) {
-                console.log('Found global Git user.email:', email);
+                console.log('[SDD:User] INFO | Found global Git user.email:', email);
                 return email;
             }
             
             return null;
             
         } catch (error) {
-            console.warn('Global git config failed (normal if git not configured):', (error as Error).message);
+            console.warn('[SDD:User] WARN | Global git config failed (normal if git not configured):', (error as Error).message);
             return null;
         }
     }
@@ -212,14 +212,14 @@ export class UserService {
             
             const email = stdout.trim();
             if (email && this.isValidEmail(email)) {
-                console.log('Found Git user.email via command:', email);
+                console.log('[SDD:User] INFO | Found Git user.email via command:', email);
                 return email;
             }
             
             return null;
             
         } catch (error) {
-            console.warn('Git config command failed (normal if no git repo):', (error as Error).message);
+            console.warn('[SDD:User] WARN | Git config command failed (normal if no git repo):', (error as Error).message);
             return null;
         }
     }
@@ -259,7 +259,7 @@ export class UserService {
         );
 
         if (action === 'Configure Email') {
-            vscode.commands.executeCommand('workbench.action.openSettings', 'vibeAssistant.userEmail');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'specDrivenDevelopment.userEmail');
         }
     }
 

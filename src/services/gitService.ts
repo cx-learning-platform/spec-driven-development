@@ -14,21 +14,21 @@ export class GitService {
             // Get workspace folder
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             if (!workspaceFolder) {
-                console.log('No workspace folder found');
+                console.log('[SDD:Git] INFO | No workspace folder found');
                 return null;
             }
 
             // Get Git extension
             const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
             if (!gitExtension) {
-                console.log('Git extension not found');
+                console.log('[SDD:Git] INFO | Git extension not found');
                 return null;
             }
 
             // Get Git API
             const git = gitExtension.getAPI(1);
             if (!git) {
-                console.log('Git API not available');
+                console.log('[SDD:Git] INFO | Git API not available');
                 return null;
             }
 
@@ -38,14 +38,14 @@ export class GitService {
             );
 
             if (!repository) {
-                console.log('No Git repository found in workspace');
+                console.log('[SDD:Git] INFO | No Git repository found in workspace');
                 return null;
             }
 
             // Get remote configuration
             const remotes = repository.state.remotes;
             if (!remotes || remotes.length === 0) {
-                console.log('No Git remotes configured');
+                console.log('[SDD:Git] INFO | No Git remotes configured');
                 return null;
             }
 
@@ -54,11 +54,11 @@ export class GitService {
             const gitUrl = origin?.fetchUrl || origin?.pushUrl || remotes[0]?.fetchUrl || remotes[0]?.pushUrl;
 
             if (!gitUrl) {
-                console.log('No Git remote URL found');
+                console.log('[SDD:Git] INFO | No Git remote URL found');
                 return null;
             }
 
-            console.log('Git remote URL:', gitUrl);
+            console.log('[SDD:Git] INFO | Git remote URL:', gitUrl);
 
             // Extract repository name from URL
             // Handles various Git URL formats:
@@ -69,15 +69,15 @@ export class GitService {
             const repoName = match ? match[1] : null;
 
             if (repoName) {
-                console.log('Extracted repository name:', repoName);
+                console.log('[SDD:Git] INFO | Extracted repository name:', repoName);
             } else {
-                console.warn('Could not extract repository name from URL:', gitUrl);
+                console.warn('[SDD:Git] WARN | Could not extract repository name from URL:', gitUrl);
             }
 
             return repoName;
 
         } catch (error) {
-            console.error('Error getting repository name:', error);
+            console.error('[SDD:Git] ERROR | Error getting repository name:', error);
             return null;
         }
     }
@@ -109,7 +109,7 @@ export class GitService {
             return origin?.fetchUrl || origin?.pushUrl || null;
 
         } catch (error) {
-            console.error('Error getting remote URL:', error);
+            console.error('[SDD:Git] ERROR | Error getting remote URL:', error);
             return null;
         }
     }
@@ -145,7 +145,7 @@ export class GitService {
             return !!repository;
 
         } catch (error) {
-            console.error('Error checking Git repository:', error);
+            console.error('[SDD:Git] ERROR | Error checking Git repository:', error);
             return false;
         }
     }

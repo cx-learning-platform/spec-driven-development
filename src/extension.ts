@@ -56,7 +56,7 @@ async function updateAWSStatusBar() {
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('🎯 Spec Driven Development is now active!');
+    console.log('[SDD:Core] INFO | 🎯 Spec Driven Development is now active!');
 
     try {
         // Clear any stale cached estimation data on activation to prevent unwanted notifications
@@ -146,16 +146,16 @@ export async function activate(context: vscode.ExtensionContext) {
             const hasCopilot = availableCommands.some(cmd => cmd.includes('github.copilot'));
             
             if (hasCopilot) {
-                console.log('✅ GitHub Copilot detected - full integration available');
+                console.log('[SDD:Core] INFO | ✅ GitHub Copilot detected - full integration available');
             } else {
-                console.log('ℹ️ GitHub Copilot not detected - extension will work with limited features');
+                console.log('[SDD:Core] INFO | ℹ️ GitHub Copilot not detected - extension will work with limited features');
             }
         }, 2000);
 
-        console.log('✅ Spec Driven Development activated successfully');
+        console.log('[SDD:Core] INFO | ✅ Spec Driven Development activated successfully');
 
     } catch (error) {
-        console.error('❌ Failed to activate Spec Driven Development:', error);
+        console.error('[SDD:Core] ERROR | ❌ Failed to activate Spec Driven Development:', error);
         vscode.window.showErrorMessage(`Failed to activate Spec Driven Development: ${error}`);
     }
 }
@@ -168,11 +168,11 @@ async function initializeWorkspace(): Promise<void> {
             const essentialInstructions = instructionManager.getEssentialInstructions();
             if (essentialInstructions.length > 0) {
                 await copilotIntegration.createOrUpdateCopilotInstructionsFile(essentialInstructions);
-                console.log('📝 Created initial copilot instructions');
+                console.log('[SDD:Core] INFO | 📝 Created initial copilot instructions');
             }
         }
     } catch (error) {
-        console.error('Failed to initialize workspace:', error);
+        console.error('[SDD:Core] ERROR | Failed to initialize workspace:', error);
     }
 }
 
@@ -203,7 +203,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                     // Get all instructions with pre-selection based on current file
                     const instructionsWithSelection = instructionManager.getAllInstructionsWithSelection(activeEditor.document.fileName);
                     
-                    console.log(`� Found ${instructionsWithSelection.length} instructions for ${path.basename(activeEditor.document.fileName)}`);
+                    console.log(`[SDD:Core] INFO | 📋 Found ${instructionsWithSelection.length} instructions for ${path.basename(activeEditor.document.fileName)}`);
                     
                     if (instructionsWithSelection.length === 0) {
                         throw new Error('No instructions available for this file context. Please check that instruction files are loaded correctly.');
@@ -571,22 +571,22 @@ function registerCommands(context: vscode.ExtensionContext) {
                 let contextPath: string | undefined = undefined;
                 let contextType: 'file' | 'folder' | 'directory' = 'file';
                 
-                console.log(`🔍 Debug: folderUri = ${folderUri ? folderUri.fsPath : 'undefined'}`);
+                console.log(`[SDD:Core] INFO | 🔍 Debug: folderUri = ${folderUri ? folderUri.fsPath : 'undefined'}`);
                 
                 if (folderUri) {
                     // Called from folder context menu
                     contextPath = folderUri.fsPath;
                     contextType = 'folder';
-                    console.log(`🔍 Debug: Using folder context: ${contextPath}`);
+                    console.log(`[SDD:Core] INFO | 🔍 Debug: Using folder context: ${contextPath}`);
                 } else {
                     // Called from file context or command palette
                     const activeEditor = vscode.window.activeTextEditor;
                     if (activeEditor) {
                         contextPath = activeEditor.document.fileName;
                         contextType = 'file';
-                        console.log(`🔍 Debug: Using file context: ${contextPath}`);
+                        console.log(`[SDD:Core] INFO | 🔍 Debug: Using file context: ${contextPath}`);
                     } else {
-                        console.log(`🔍 Debug: No context available (no folder or active editor)`);
+                        console.log(`[SDD:Core] INFO | 🔍 Debug: No context available (no folder or active editor)`);
                     }
                 }
                 
@@ -635,17 +635,52 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.updateAWSStatus(status);
             }
             
-            // Show success message
+            // Show success message with clean configuration details
             if (status.connected) {
-                const profileMsg = status.profile ? ` using [${status.profile}] profile` : '';
-                vscode.window.showInformationMessage(`✅ Successfully connected to AWS${profileMsg}!`);
+                const region = status.region || 'us-east-1';
+                const profile = status.profile || 'default';
+                vscode.window.showInformationMessage(
+                    `✅ AWS Connection Successful\n\n` +
+                    `Configuration Details:\n` +
+                    `• Region: ${region}\n` +
+                    `• Profile: ${profile}\n` +
+                    `• Secrets Manager: ${status.secretsManagerAccess ? 'Ready' : 'Not Available'}`
+                );
             }
             
             // Update status bar
             await updateAWSStatusBar();
         } catch (error) {
-            // Only show error once here
-            vscode.window.showErrorMessage(`❌ ${(error as Error).message}`);
+            // Get connection details from service for error notification
+            const connectionLog = awsService.getConnectionLog();
+            
+            // Extract configuration details from logs
+            let configDetails = '';
+            const profileLog = connectionLog.find(log => log.includes('Configured AWS Profile:'));
+            const regionLog = connectionLog.find(log => log.includes('Configured AWS Region:'));
+            
+            if (profileLog) {
+                const profileMatch = profileLog.match(/Configured AWS Profile: "([^"]+)"/);
+                if (profileMatch) {
+                    configDetails += `• Profile: ${profileMatch[1]}\n`;
+                }
+            }
+            
+            if (regionLog) {
+                const regionMatch = regionLog.match(/Configured AWS Region: "([^"]+)"/);
+                if (regionMatch) {
+                    configDetails += `• Region: ${regionMatch[1]}\n`;
+                }
+            }
+            
+            // Show detailed error with configuration info
+            const errorMsg = (error as Error).message;
+            vscode.window.showErrorMessage(
+                `❌ AWS Connection Failed\n\n` +
+                `Configuration Used:\n${configDetails || '• Profile: default\n• Region: AWS CLI default\n'}\n` +
+                `Error: ${errorMsg}\n\n` +
+                `💡 Check your AWS credentials and configuration`
+            );
             await updateAWSStatusBar();
         }
     });
@@ -755,7 +790,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         } catch (error) {
             const errorMessage = `Failed to list AWS secrets: ${(error as Error).message}`;
             vscode.window.showErrorMessage(errorMessage);
-            console.error(errorMessage, error);
+            console.error('[SDD:Core] ERROR |', errorMessage, error);
             return { secrets: [], region: '', profile: '' };
         }
     });
@@ -773,7 +808,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         } catch (error) {
             const errorMessage = `Failed to fetch Salesforce credentials: ${(error as Error).message}`;
             vscode.window.showErrorMessage(errorMessage);
-            console.error(errorMessage, error);
+            console.error('[SDD:Core] ERROR |', errorMessage, error);
             return null;
         }
     });
@@ -803,7 +838,7 @@ function registerCommands(context: vscode.ExtensionContext) {
             }
         } catch (error) {
             const errorMessage = (error as Error).message;
-            console.error('Failed to load initiatives:', errorMessage);
+            console.error('[SDD:Core] ERROR | Failed to load initiatives:', errorMessage);
             
             // Send user-friendly error message to UI instead of showing intrusive popup
             if (specDrivenDevelopmentPanel) {
@@ -833,7 +868,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const loadEpicsForInitiativeCommand = vscode.commands.registerCommand('specDrivenDevelopment.loadEpicsForInitiative', async (jiraTeam: string) => {
         try {
-            console.log(`Loading epics for Jira team: ${jiraTeam}`);
+            console.log(`[SDD:Core] INFO | Loading epics for Jira team: ${jiraTeam}`);
             const epics = await feedbackService.getEpicsFromInitiative(jiraTeam);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendEpics(epics);
@@ -862,7 +897,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const loadSprintsForTeamCommand = vscode.commands.registerCommand('specDrivenDevelopment.loadSprintsForTeam', async (teamName: string) => {
         try {
-            console.log(`Loading sprints for team: ${teamName}`);
+            console.log(`[SDD:Core] INFO | Loading sprints for team: ${teamName}`);
             const sprints = await feedbackService.getSprintsForTeam(teamName);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendSprintDetails(sprints);
@@ -877,13 +912,13 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const autoPopulateFromGitCommand = vscode.commands.registerCommand('specDrivenDevelopment.autoPopulateFromGit', async () => {
         try {
-            console.log('Auto-populate from Git command triggered');
+            console.log('[SDD:Core] INFO | Auto-populate from Git command triggered');
             
             // Trigger username/email configuration along with git auto-population
-            console.log('Triggering username/email configuration for correct assignee...');
+            console.log('[SDD:Core] INFO | Triggering username/email configuration for correct assignee...');
             const userEmail = await userService.getUserEmail();
             const username = await userService.getUsernameFromEmail();
-            console.log(`User configured: ${userEmail} (username: ${username})`);
+            console.log(`[SDD:Core] INFO | User configured: ${userEmail} (username: ${username})`);
             
             const result = await feedbackService.autoPopulateFromGit();
             
@@ -893,13 +928,13 @@ function registerCommands(context: vscode.ExtensionContext) {
             
             // Log result for debugging
             if (result.success) {
-                console.log(`Auto-population successful: ${result.repoName} → ${result.applicationName} → ${result.recommendedInitiativeName}`);
-                console.log(`Assignee configured: ${username} (${userEmail})`);
+                console.log(`[SDD:Core] INFO | Auto-population successful: ${result.repoName} → ${result.applicationName} → ${result.recommendedInitiativeName}`);
+                console.log(`[SDD:Core] INFO | Assignee configured: ${username} (${userEmail})`);
             } else {
-                console.log(`Auto-population failed: ${result.fallbackReason}`);
+                console.log(`[SDD:Core] INFO | Auto-population failed: ${result.fallbackReason}`);
             }
         } catch (error) {
-            console.error('Error in autoPopulateFromGitCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in autoPopulateFromGitCommand:', error);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendAutoPopulationResult({
                     success: false,
@@ -914,21 +949,21 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const configureUserForFeaturesCommand = vscode.commands.registerCommand('specDrivenDevelopment.configureUserForFeatures', async () => {
         try {
-            console.log('Configure user for features command triggered');
+            console.log('[SDD:Core] INFO | Configure user for features command triggered');
             
             // Trigger username/email configuration for feature creation
             const userEmail = await userService.getUserEmail();
             const username = await userService.getUsernameFromEmail();
-            console.log(`User configured for feature creation: ${userEmail} (username: ${username})`);
+            console.log(`[SDD:Core] INFO | User configured for feature creation: ${userEmail} (username: ${username})`);
             
             // Optional: Show subtle notification that user is configured
             const userInfo = await userService.getUserInfo();
             if (userInfo.source !== 'system') {
-                console.log(`✅ User ready for feature creation with assignee: ${username}`);
+                console.log(`[SDD:Core] INFO | ✅ User ready for feature creation with assignee: ${username}`);
             }
             
         } catch (error) {
-            console.error('Error in configureUserForFeaturesCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in configureUserForFeaturesCommand:', error);
         }
     });
 
@@ -954,9 +989,9 @@ function registerCommands(context: vscode.ExtensionContext) {
                     submittedTasks.push(newSubmission);
                     await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', submittedTasks);
                     
-                    console.log(`TaskMaster task ${data.taskMasterTask.id} marked as submitted: ${result.ticketId}`);
+                    console.log(`[SDD:Core] INFO | TaskMaster task ${data.taskMasterTask.id} marked as submitted: ${result.ticketId}`);
                 } catch (storageError) {
-                    console.error('Failed to store TaskMaster submission info:', storageError);
+                    console.error('[SDD:Core] ERROR | Failed to store TaskMaster submission info:', storageError);
                     // Don't fail the whole submission for storage errors
                 }
             }
@@ -1053,14 +1088,14 @@ function registerCommands(context: vscode.ExtensionContext) {
                     // Extract JIRA ticket ID from URL
                     const jiraTicketId = taskService.extractJiraTicketId(existingSubmission.jiraUrl);
                     if (jiraTicketId) {
-                        console.log(`Verifying if JIRA ticket ${jiraTicketId} still exists...`);
+                        console.log(`[SDD:Core] INFO | Verifying if JIRA ticket ${jiraTicketId} still exists...`);
                         
                         // Verify ticket exists in JIRA
                         const validationResult = await jiraService.validateJiraIssue(jiraTicketId);
                         
                         if (!validationResult.isValid) {
                             // Ticket no longer exists, remove from cache and allow resubmission
-                            console.log(`JIRA ticket ${jiraTicketId} no longer exists. Removing from cache and allowing resubmission.`);
+                            console.log(`[SDD:Core] INFO | JIRA ticket ${jiraTicketId} no longer exists. Removing from cache and allowing resubmission.`);
                             const updatedTasks = submittedTasks.filter(task => task.taskId !== data.taskId);
                             await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', updatedTasks);
                             
@@ -1080,7 +1115,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                         // Check if ticket status is DONE
                         if (validationResult.status && validationResult.status.toUpperCase() === 'DONE') {
                             // Ticket is marked as DONE, remove from cache and allow resubmission
-                            console.log(`JIRA ticket ${jiraTicketId} is marked as DONE. Removing from cache and allowing resubmission.`);
+                            console.log(`[SDD:Core] INFO | JIRA ticket ${jiraTicketId} is marked as DONE. Removing from cache and allowing resubmission.`);
                             const updatedTasks = submittedTasks.filter(task => task.taskId !== data.taskId);
                             await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', updatedTasks);
                             
@@ -1097,10 +1132,10 @@ function registerCommands(context: vscode.ExtensionContext) {
                             return;
                         }
                         
-                        console.log(`JIRA ticket ${jiraTicketId} still exists with status: ${validationResult.status || 'Unknown'}. Showing duplicate warning.`);
+                        console.log(`[SDD:Core] INFO | JIRA ticket ${jiraTicketId} still exists with status: ${validationResult.status || 'Unknown'}. Showing duplicate warning.`);
                     }
                 } catch (validationError) {
-                    console.error('Error validating JIRA ticket existence:', validationError);
+                    console.error('[SDD:Core] ERROR | Error validating JIRA ticket existence:', validationError);
                     // If validation fails, assume ticket might not exist and remove from cache
                     const updatedTasks = submittedTasks.filter(task => task.taskId !== data.taskId);
                     await context.globalState.update('specDrivenDevelopment.submittedTaskMasterTasks', updatedTasks);
@@ -1130,7 +1165,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.sendDuplicateCheckResult(result);
             }
         } catch (error) {
-            console.error('Error checking duplicate TaskMaster submission:', error);
+            console.error('[SDD:Core] ERROR | Error checking duplicate TaskMaster submission:', error);
             // On error, allow submission to proceed
             const result = {
                 isDuplicate: false,
@@ -1519,7 +1554,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     // Task Management Commands
     const retrieveWipTasksCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveWipTasks', async (options: any = {}) => {
         try {
-            console.log('Retrieve WIP tickets command triggered with options:', options);
+            console.log('[SDD:Core] INFO | Retrieve WIP tickets command triggered with options:', options);
             
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -1527,13 +1562,13 @@ function registerCommands(context: vscode.ExtensionContext) {
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
-                console.log('Checking AWS connection status...');
+                console.log('[SDD:Core] INFO | Checking AWS connection status...');
                 
                 progress.report({ increment: 30, message: 'Fetching WIP tickets from Salesforce...' });
-                console.log('Calling taskService.retrieveWipTasks()...');
+                console.log('[SDD:Core] INFO | Calling taskService.retrieveWipTasks()...');
                 
                 const result = await taskService.retrieveWipTasks(options);
-                console.log(`Retrieved ${result.tasks.length} WIP tickets (${result.totalCount} total):`, result);
+                console.log(`[SDD:Core] INFO | Retrieved ${result.tasks.length} WIP tickets (${result.totalCount} total):`, result);
                 
                 const foundStartRecord = (options.offset || 0) + 1;
                 const foundEndRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
@@ -1541,7 +1576,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 progress.report({ increment: 50, message: `Found ${foundRangeText} WIP tickets` });
                 
                 if (specDrivenDevelopmentPanel) {
-                    console.log('Sending WIP task list to webview...');
+                    console.log('[SDD:Core] INFO | Sending WIP task list to webview...');
                     specDrivenDevelopmentPanel.sendTaskList(result.tasks, 'wip', {
                         totalCount: result.totalCount,
                         hasMore: result.hasMore,
@@ -1550,7 +1585,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                         searchTerm: options.searchTerm
                     });
                 } else {
-                    console.error('specDrivenDevelopmentPanel is null');
+                    console.error('[SDD:Core] ERROR | specDrivenDevelopmentPanel is null');
                 }
                 
                 const searchText = options.searchTerm ? ` (search: "${options.searchTerm}")` : '';
@@ -1560,7 +1595,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} WIP tickets${searchText}`);
             });
         } catch (error) {
-            console.error('Error in retrieveWipTasksCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in retrieveWipTasksCommand:', error);
             
             // Check if this is an email configuration error
             const errorMessage = (error as Error).message;
@@ -1570,7 +1605,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                     'Configure Email'
                 );
                 if (action === 'Configure Email') {
-                    vscode.commands.executeCommand('vibeAssistant.configureUser');
+                    vscode.commands.executeCommand('specDrivenDevelopment.configureUser');
                 }
             } else {
                 vscode.window.showErrorMessage(`Failed to retrieve WIP tickets: ${errorMessage}`);
@@ -1584,7 +1619,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const retrieveRunningTasksCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveRunningTasks', async (options: any = {}) => {
         try {
-            console.log('Retrieve all tickets command triggered with options:', options);
+            console.log('[SDD:Core] INFO | Retrieve all tickets command triggered with options:', options);
             
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -1592,13 +1627,13 @@ function registerCommands(context: vscode.ExtensionContext) {
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
-                console.log('Checking AWS connection status...');
+                console.log('[SDD:Core] INFO | Checking AWS connection status...');
                 
                 progress.report({ increment: 30, message: 'Fetching tickets from Salesforce...' });
-                console.log('Calling taskService.retrieveRunningTasks()...');
+                console.log('[SDD:Core] INFO | Calling taskService.retrieveRunningTasks()...');
                 
                 const result = await taskService.retrieveRunningTasks(options);
-                console.log(`Retrieved ${result.tasks.length} tickets (${result.totalCount} total):`, result);
+                console.log(`[SDD:Core] INFO | Retrieved ${result.tasks.length} tickets (${result.totalCount} total):`, result);
                 
                 const foundStartRecord = (options.offset || 0) + 1;
                 const foundEndRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
@@ -1606,7 +1641,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 progress.report({ increment: 50, message: `Found ${foundRangeText} tasks` });
                 
                 if (specDrivenDevelopmentPanel) {
-                    console.log('Sending task list to webview...');
+                    console.log('[SDD:Core] INFO | Sending task list to webview...');
                     specDrivenDevelopmentPanel.sendTaskList(result.tasks, 'running', {
                         totalCount: result.totalCount,
                         hasMore: result.hasMore,
@@ -1615,7 +1650,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                         searchTerm: options.searchTerm
                     });
                 } else {
-                    console.error('specDrivenDevelopmentPanel is null');
+                    console.error('[SDD:Core] ERROR | specDrivenDevelopmentPanel is null');
                 }
                 
                 const searchText = options.searchTerm ? ` (search: "${options.searchTerm}")` : '';
@@ -1625,7 +1660,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} tickets${searchText}`);
             });
         } catch (error) {
-            console.error('Error in retrieveRunningTasksCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in retrieveRunningTasksCommand:', error);
             
             // Check if this is an email configuration error
             const errorMessage = (error as Error).message;
@@ -1635,7 +1670,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                     'Configure Email'
                 );
                 if (action === 'Configure Email') {
-                    vscode.commands.executeCommand('vibeAssistant.configureUser');
+                    vscode.commands.executeCommand('specDrivenDevelopment.configureUser');
                 }
             } else {
                 vscode.window.showErrorMessage(`Failed to retrieve tickets: ${errorMessage}`);
@@ -1649,7 +1684,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const retrieveArchivedTasksCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveArchivedTasks', async (options: any = {}) => {
         try {
-            console.log('Retrieve done tickets command triggered with options:', options);
+            console.log('[SDD:Core] INFO | Retrieve done tickets command triggered with options:', options);
             
             await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
@@ -1657,13 +1692,13 @@ function registerCommands(context: vscode.ExtensionContext) {
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
-                console.log('Checking AWS connection status...');
+                console.log('[SDD:Core] INFO | Checking AWS connection status...');
                 
                 progress.report({ increment: 30, message: 'Fetching done tickets from Salesforce...' });
-                console.log('Calling taskService.retrieveArchivedTasks()...');
+                console.log('[SDD:Core] INFO | Calling taskService.retrieveArchivedTasks()...');
                 
                 const result = await taskService.retrieveArchivedTasks(options);
-                console.log(`Retrieved ${result.tasks.length} done tickets (${result.totalCount} total):`, result);
+                console.log(`[SDD:Core] INFO | Retrieved ${result.tasks.length} done tickets (${result.totalCount} total):`, result);
                 
                 const foundStartRecord = (options.offset || 0) + 1;
                 const foundEndRecord = Math.min((options.offset || 0) + result.tasks.length, result.totalCount);
@@ -1671,7 +1706,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 progress.report({ increment: 50, message: `Found ${foundRangeText} done tickets` });
                 
                 if (specDrivenDevelopmentPanel) {
-                    console.log('Sending done ticket list to webview...');
+                    console.log('[SDD:Core] INFO | Sending done ticket list to webview...');
                     specDrivenDevelopmentPanel.sendTaskList(result.tasks, 'archived', {
                         totalCount: result.totalCount,
                         hasMore: result.hasMore,
@@ -1680,7 +1715,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                         searchTerm: options.searchTerm
                     });
                 } else {
-                    console.error('specDrivenDevelopmentPanel is null');
+                    console.error('[SDD:Core] ERROR | specDrivenDevelopmentPanel is null');
                 }
                 
                 const searchText = options.searchTerm ? ` (search: "${options.searchTerm}")` : '';
@@ -1690,7 +1725,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} done tickets${searchText}`);
             });
         } catch (error) {
-            console.error('Error in retrieveArchivedTasksCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in retrieveArchivedTasksCommand:', error);
             
             // Check if this is an email configuration error
             const errorMessage = (error as Error).message;
@@ -1700,7 +1735,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                     'Configure Email'
                 );
                 if (action === 'Configure Email') {
-                    vscode.commands.executeCommand('vibeAssistant.configureUser');
+                    vscode.commands.executeCommand('specDrivenDevelopment.configureUser');
                 }
             } else {
                 vscode.window.showErrorMessage(`Failed to retrieve done tickets: ${errorMessage}`);
@@ -1716,7 +1751,7 @@ function registerCommands(context: vscode.ExtensionContext) {
         try {
             // Extract taskId from the taskData object
             const taskId = typeof taskData === 'string' ? taskData : taskData?.taskId || taskData?.Id;
-            console.log('Restore task command triggered for:', taskData, 'extracted taskId:', taskId);
+            console.log('[SDD:Core] INFO | Restore task command triggered for:', taskData, 'extracted taskId:', taskId);
             
             if (!taskId) {
                 throw new Error('No valid task ID provided');
@@ -1728,13 +1763,13 @@ function registerCommands(context: vscode.ExtensionContext) {
                 cancellable: false
             }, async (progress) => {
                 progress.report({ increment: 20, message: 'Checking AWS connection...' });
-                console.log('Checking AWS connection status...');
+                console.log('[SDD:Core] INFO | Checking AWS connection status...');
                 
                 progress.report({ increment: 50, message: 'Restoring task in Salesforce...' });
-                console.log('Calling taskService.restoreTask()...');
+                console.log('[SDD:Core] INFO | Calling taskService.restoreTask()...');
                 
                 await taskService.restoreTask(taskId);
-                console.log('Task restored successfully');
+                console.log('[SDD:Core] INFO | Task restored successfully');
                 
                 progress.report({ increment: 100, message: 'Task restored successfully' });
                 
@@ -1742,12 +1777,12 @@ function registerCommands(context: vscode.ExtensionContext) {
                 
                 // Refresh the current view by notifying webview
                 if (specDrivenDevelopmentPanel) {
-                    console.log('Notifying webview of task restoration...');
+                    console.log('[SDD:Core] INFO | Notifying webview of task restoration...');
                     specDrivenDevelopmentPanel.sendTaskNotification('taskRestored', { taskId: taskId });
                 }
             });
         } catch (error) {
-            console.error('Error in restoreTaskCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in restoreTaskCommand:', error);
             vscode.window.showErrorMessage(`Failed to restore task: ${(error as Error).message}`);
         }
     });
@@ -1755,14 +1790,14 @@ function registerCommands(context: vscode.ExtensionContext) {
     const editTaskCommand = vscode.commands.registerCommand('specDrivenDevelopment.editTask', async (taskData: any) => {
         try {
             const { taskId } = taskData;
-            console.log('Edit task command triggered for:', taskId, taskData);
+            console.log('[SDD:Core] INFO | Edit task command triggered for:', taskId, taskData);
             
             // Send task data to webview for comprehensive editing
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.showTaskEditForm(taskData);
             }
         } catch (error) {
-            console.error('Error in editTaskCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in editTaskCommand:', error);
             vscode.window.showErrorMessage(`Failed to open edit form: ${(error as Error).message}`);
         }
     });
@@ -1770,7 +1805,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     const saveTaskUpdatesCommand = vscode.commands.registerCommand('specDrivenDevelopment.saveTaskUpdates', async (updateData: any) => {
         try {
             const { taskId, updates, taskType } = updateData;
-            console.log('Save task updates command triggered:', taskId, updates, 'taskType:', taskType);
+            console.log('[SDD:Core] INFO | Save task updates command triggered:', taskId, updates, 'taskType:', taskType);
             
             const result = await taskService.updateTask(taskId, updates);
             
@@ -1793,7 +1828,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`❌ Failed to update task: ${result.message}`);
             }
         } catch (error) {
-            console.error('Error in saveTaskUpdatesCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in saveTaskUpdatesCommand:', error);
             vscode.window.showErrorMessage(`Failed to save task updates: ${(error as Error).message}`);
         }
     });
@@ -1831,7 +1866,7 @@ function registerCommands(context: vscode.ExtensionContext) {
     const cleanupTaskCommand = vscode.commands.registerCommand('specDrivenDevelopment.cleanupTask', async (taskData: any) => {
         try {
             const { taskId, taskName } = taskData;
-            console.log('Marking task as Done in Salesforce:', taskId, taskName);
+            console.log('[SDD:Core] INFO | Marking task as Done in Salesforce:', taskId, taskName);
             
             // Retrieve full task object to get CreatedDate and other fields
             const wipResult = await taskService.retrieveWipTasks({ limit: 1000 });
@@ -1858,7 +1893,7 @@ function registerCommands(context: vscode.ExtensionContext) {
             
             // If user cancels, exit early
             if (confirmation !== 'Yes, Submit') {
-                console.log('User cancelled ticket submission');
+                console.log('[SDD:Core] INFO | User cancelled ticket submission');
                 return;
             }
             
@@ -1876,16 +1911,16 @@ function registerCommands(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage(`❌ Failed to mark ticket as Done: ${result.message}`);
             }
         } catch (error) {
-            console.error('Error in cleanupTaskCommand:', error);
+            console.error('[SDD:Core] ERROR | Error in cleanupTaskCommand:', error);
             vscode.window.showErrorMessage(`Failed to mark ticket as Done: ${(error as Error).message}`);
         }
     });
 
     // User Configuration Command
-    const configureUserCommand = vscode.commands.registerCommand('vibeAssistant.configureUser', async () => {
+    const configureUserCommand = vscode.commands.registerCommand('specDrivenDevelopment.configureUser', async () => {
         try {
             // Get current configured email without triggering auto-detection popup
-            const currentConfiguredEmail = vscode.workspace.getConfiguration('vibeAssistant').get<string>('userEmail') || '';
+            const currentConfiguredEmail = vscode.workspace.getConfiguration('specDrivenDevelopment').get<string>('userEmail') || '';
             
             // Show input box directly for email configuration
             const newEmail = await vscode.window.showInputBox({
@@ -1924,10 +1959,10 @@ function registerCommands(context: vscode.ExtensionContext) {
             });
 
             if (newEmail) {
-                await vscode.workspace.getConfiguration('vibeAssistant').update('userEmail', newEmail, vscode.ConfigurationTarget.Global);
+                await vscode.workspace.getConfiguration('specDrivenDevelopment').update('userEmail', newEmail, vscode.ConfigurationTarget.Global);
                 userService.clearCache();
                 // Don't trigger auto-detection popup - just confirm the configuration
-                console.log(`Email configuration updated: ${newEmail}`);
+                console.log(`[SDD:Core] INFO | Email configuration updated: ${newEmail}`);
                 vscode.window.showInformationMessage(`✅ Email configured: ${newEmail}. You can now retrieve your tasks.`);
             }
         } catch (error) {
@@ -1948,7 +1983,7 @@ function registerCommands(context: vscode.ExtensionContext) {
 
             
             // Check manual email configuration
-            const manualEmail = vscode.workspace.getConfiguration('vibeAssistant').get<string>('userEmail');
+            const manualEmail = vscode.workspace.getConfiguration('specDrivenDevelopment').get<string>('userEmail');
             const hasManualEmail = !!manualEmail;
             
             // Show debug information
@@ -1973,7 +2008,7 @@ WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${use
 � How to Configure Email:
 1. Use Command Palette: "Configure User Email"
 2. Or ensure Git is configured: git config --global user.email your@cisco.com
-3. Or set manual email: Settings → vibeAssistant.userEmail
+3. Or set manual email: Settings → specDrivenDevelopment.userEmail
 
 📋 Requirements:
 • Email must be cisco.com domain
@@ -2066,7 +2101,7 @@ function setupEventListeners(context: vscode.ExtensionContext) {
                 }
             }
         } catch (error) {
-            console.error('[SDD] Failed to auto-apply instructions:', error);
+            console.error('[SDD:Core] ERROR | Failed to auto-apply instructions:', error);
             // Don't rethrow - prevent extension crash
         }
     });
@@ -2075,10 +2110,10 @@ function setupEventListeners(context: vscode.ExtensionContext) {
     const configChange = vscode.workspace.onDidChangeConfiguration((event: vscode.ConfigurationChangeEvent) => {
         try {
             if (event.affectsConfiguration('specDrivenDevelopment')) {
-                console.log('[SDD] Configuration changed');
+                console.log('[SDD:Core] INFO | Configuration changed');
             }
         } catch (error) {
-            console.error('[SDD] Configuration change handler error:', error);
+            console.error('[SDD:Core] ERROR | Configuration change handler error:', error);
         }
     });
 
@@ -2095,12 +2130,12 @@ function setupEventListeners(context: vscode.ExtensionContext) {
                         const codeContext = contextAnalyzer.analyzeDocument(event.document);
                         // Context analysis completed - UI providers removed for simplified panel
                     } catch (error) {
-                        console.error('[SDD] Failed to analyze document changes:', error);
+                        console.error('[SDD:Core] ERROR | Failed to analyze document changes:', error);
                     }
                 }, 1000); // 1 second debounce
             }
         } catch (error) {
-            console.error('[SDD] Document change handler error:', error);
+            console.error('[SDD:Core] ERROR | Document change handler error:', error);
         }
     });
 
@@ -2122,7 +2157,7 @@ function setupAutoApplyInstructions(context: vscode.ExtensionContext) {
                         await copilotIntegration.applyInstructionsToWorkspace(instructions);
                     }
                 } catch (error) {
-                    console.error('[SDD] Failed to auto-apply initial instructions:', error);
+                    console.error('[SDD:Core] ERROR | Failed to auto-apply initial instructions:', error);
                     // Don't rethrow - prevent extension crash
                 }
             }, 2000); // Delay to ensure extension is fully loaded
@@ -2165,49 +2200,49 @@ export async function handlePromptClick(prompt: any) {
 }
 
 export function deactivate() {
-    console.log('[SDD] Starting extension deactivation and cleanup...');
+    console.log('[SDD:Core] INFO | Starting extension deactivation and cleanup...');
     
     // Clean up timeouts
     if (vibeAnalysisTimeout) {
         clearTimeout(vibeAnalysisTimeout);
         vibeAnalysisTimeout = undefined;
-        console.log('[SDD] Cleared vibeAnalysisTimeout');
+        console.log('[SDD:Core] INFO | Cleared vibeAnalysisTimeout');
     }
     
     // Dispose services
     if (copilotIntegration) {
         copilotIntegration.dispose();
-        console.log('[SDD] Disposed copilotIntegration');
+        console.log('[SDD:Core] INFO | Disposed copilotIntegration');
     }
     if (resourceManager) {
         resourceManager.dispose();
-        console.log('[SDD] Disposed resourceManager');
+        console.log('[SDD:Core] INFO | Disposed resourceManager');
     }
     if (awsService) {
         awsService.dispose();
-        console.log('[SDD] Disposed awsService');
+        console.log('[SDD:Core] INFO | Disposed awsService');
     }
     if (userService) {
         userService.dispose();
-        console.log('[SDD] Disposed userService');
+        console.log('[SDD:Core] INFO | Disposed userService');
     }
     if (estimationParser) {
         estimationParser.dispose();
-        console.log('[SDD] Disposed estimationParser');
+        console.log('[SDD:Core] INFO | Disposed estimationParser');
     }
     if (jiraService) {
         jiraService.dispose();
-        console.log('[SDD] Disposed jiraService');
+        console.log('[SDD:Core] INFO | Disposed jiraService');
     }
     if (feedbackService) {
         feedbackService.dispose();
-        console.log('[SDD] Disposed feedbackService');
+        console.log('[SDD:Core] INFO | Disposed feedbackService');
     }
     if (notificationManager) {
         notificationManager.dispose();
-        console.log('[SDD] Disposed notificationManager');
+        console.log('[SDD:Core] INFO | Disposed notificationManager');
     }
     
     // taskService doesn't have a dispose method, so no cleanup needed
-    console.log('[SDD] Spec Driven Development deactivated and cleaned up successfully');
+    console.log('[SDD:Core] INFO | Spec Driven Development deactivated and cleaned up successfully');
 }
