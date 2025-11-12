@@ -164,7 +164,7 @@
         "category": "Spec Driven Development"
       },
       {
-        "command": "vibeAssistant.configureUser",
+        "command": "specDrivenDevelopment.configureUser",
         "title": "Configure User Email",
         "category": "Spec Driven Development"
       }
@@ -312,11 +312,6 @@
           "default": "lcp-devsecops-plugin",
           "description": "Name of the AWS Secrets Manager secret containing Salesforce credentials"
         },
-        "specDrivenDevelopment.salesforceSecretKeywords": {
-          "type": "array",
-          "default": ["lcp-devsecops-plugin", "sf", "crm", "sales", "force"],
-          "description": "Keywords to search for when looking for Salesforce secrets (fallback if exact name not found)"
-        },
         "specDrivenDevelopment.enableEstimationParsing": {
           "type": "boolean",
           "default": true,
@@ -358,7 +353,7 @@
           "description": "Show detailed information in notifications"
         },
 
-        "vibeAssistant.userEmail": {
+        "specDrivenDevelopment.userEmail": {
           "type": "string",
           "default": "",
           "description": "Cisco email address for JIRA ticket filtering (must be @cisco.com, auto-configured from GitHub API if empty)"

@@ -9,6 +9,137 @@
 
 **Spec Driven Development** is a comprehensive VS Code extension that combines intelligent development resources with enterprise-grade task management and project integration capabilities.
 
+---
+
+## 📋 Prerequisites
+
+- **Node.js** (v14 or higher)
+- **VS Code** (v1.74.0 or higher)
+- **Git**
+- **AWS CLI** 
+
+---
+
+### 🚀 **Development Setup**
+
+**Step 0: Connect to AWS Development Account**
+```
+Windows:
+> .\duo-sso_windows_amd64 -duo-idp -session-duration 3600 -factor push
+
+Mac:
+> duo-sso  -session-duration 3600
+
+Then, Select the `532054877749` account with `developer` role.
+```
+
+**Step 1: Clone and Install**
+```bash
+git clone <your-git-repo-link>
+cd spec-driven-development
+npm install
+```
+
+**Step 2: Compile the Extension**
+```bash
+npm run compile
+```
+
+**Step 3: Run the Extension**
+1. Press **`Fn+F5`** (or **`F5`** on some keyboards) in VS Code
+2. This opens a new **Extension Development Host** window
+3. The extension is now running in the test instance
+4. Make changes to code, run `npm run compile` again, then reload the test window (`Ctrl+R`)
+
+
+---
+
+## 🛠️ Troubleshooting
+
+### ❌ **AWS Connection Issues**
+
+If AWS connection fails, check the following in order:
+
+**1. Verify AWS CLI is installed:**
+```bash
+aws --version
+```
+If not installed, see [AWS CLI Setup](#️-aws-cli-setup-required-for-enterprise-features) above.
+
+**2. Check AWS credentials are configured:**
+```bash
+aws configure list
+```
+Should show your credentials/profile configuration.
+
+**3. Test AWS connection:**
+```bash
+aws sts get-caller-identity
+```
+Should return your account ID, user ARN, and user ID.
+
+**4. If using SSO, ensure you're logged in:**
+```bash
+aws sso login --profile default
+```
+Your SSO session may have expired. Re-authenticate via browser.
+
+**5. Verify Secrets Manager access:**
+```bash
+aws secretsmanager list-secrets --max-results 1
+```
+Should list secrets (or empty list if none exist). If error, check IAM permissions.
+
+**6. Check your AWS profile:**
+- VS Code may not detect the correct profile
+- Set environment variable: `AWS_PROFILE=your-profile-name`
+- Or update `~/.aws/config` to set `[default]` profile
+
+**7. Check region configuration:**
+```bash
+aws configure get region
+```
+Ensure the region matches where your Secrets Manager secrets are stored.
+
+---
+
+### 🔄 **Panel & Connection Issues**
+
+**"Connect to AWS" button shows error:**
+1. Click the **"Connect to AWS"** button again in the Configurations tab
+2. The connection may have timed out or failed silently
+3. If error persists, check AWS credentials using steps above
+
+**Panel not updating after configuration changes:**
+1. Close the Spec Driven Development panel
+2. Reopen it by clicking the status bar item or using Command Palette
+3. This refreshes the panel state
+
+**AWS connection succeeds but Salesforce fails:**
+1. Verify your Salesforce credentials are stored in AWS Secrets Manager
+2. Check the secret name matches the extension configuration
+3. Click **"Connect to AWS"** again to re-fetch credentials
+4. Review detailed error message in the panel
+
+**Changes not reflecting in Extension Development Host:**
+1. Run `npm run compile` in the main VS Code window
+2. In the Extension Development Host window, press `Ctrl+R` to reload
+3. Or close the Extension Development Host and press `Fn+F5` again
+
+---
+
+### ❓ **Other Common Issues**
+
+| Issue | Solution |
+|-------|----------|
+| Extension not loading | Check VS Code version (requires 1.74.0+), restart VS Code |
+| Task import conflicts | Tasks with duplicate IDs - delete existing tasks or use different IDs |
+| Salesforce integration errors | Check AWS Secrets Manager permissions and secret format. Review detailed error messages in panel |
+| Auto-populate not working | Ensure workspace has Git repository with remote configured. Check Output panel for Git detection logs |
+| Storage limit exceeded | Salesforce error indicating data storage limits reached. Contact Salesforce admin to increase storage quota |
+| Webview panel not displaying | Restart VS Code, check for extension conflicts |
+| Git repository not detected | Initialize Git repo with `git init` and add remote with `git remote add origin <url>` |
+
 ## 🎯 Core Features
 
 ### 📚 **Development Resources & Guidelines**
@@ -43,15 +174,6 @@
 2. Click the "Spec Driven Development" status bar item to open the panel
 3. Use "Import from TaskMaster" to start managing tasks immediately
 4. Access development resources via context menu commands
-
-### 🚀 **Development Setup**
-```bash
-git clone <your-git-repo-link>
-cd spec-driven-development
-npm install
-npm run compile
-# Press Fn+F5 in VS Code to launch test instance
-```
 
 
 #### **Salesforce Credentials in AWS Secrets Manager**
@@ -143,21 +265,6 @@ Install from the VS Code Marketplace or use the Command Palette (`Ctrl+Shift+P` 
 ```
 
 ---
-
-## 🛠️ Troubleshooting
-
-### ❓ **Common Issues**
-
-| Issue | Solution |
-|-------|----------|
-| Extension not loading | Check VS Code version (requires 1.74.0+), restart VS Code |
-| AWS authentication failed | Verify `aws configure` and test with `aws sts get-caller-identity` |
-| Task import conflicts | Tasks with duplicate IDs - delete existing tasks or use different IDs |
-| Salesforce integration errors | Check AWS Secrets Manager permissions and secret format. Review detailed error messages in panel |
-| Auto-populate not working | Ensure workspace has Git repository with remote configured. Check Output panel for Git detection logs |
-| Storage limit exceeded | Salesforce error indicating data storage limits reached. Contact Salesforce admin to increase storage quota |
-| Webview panel not displaying | Restart VS Code, check for extension conflicts |
-| Git repository not detected | Initialize Git repo with `git init` and add remote with `git remote add origin <url>` |
 
 ### 🔍 **Debug Information**
 1. Open VS Code Output panel (`View > Output`)

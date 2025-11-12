@@ -687,6 +687,40 @@
         updateFeedbackFormState();
     }
 
+    // Update connection logs display
+    function updateConnectionLogs(logs) {
+        const logSection = document.getElementById('connection-log-section');
+        const logContent = document.getElementById('connection-log-content');
+        const copyBtn = document.getElementById('copy-log-btn');
+        
+        if (logs && logs.length > 0) {
+            logSection.style.display = 'block';
+            logContent.textContent = logs.join('\n');
+            
+            // Remove any existing event listener to prevent duplicates
+            const newCopyBtn = copyBtn.cloneNode(true);
+            copyBtn.parentNode.replaceChild(newCopyBtn, copyBtn);
+            
+            // Add copy functionality
+            newCopyBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(logs.join('\n')).then(() => {
+                    newCopyBtn.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        newCopyBtn.textContent = '📋 Copy Log';
+                    }, 2000);
+                }).catch(err => {
+                    console.error('Failed to copy log:', err);
+                    newCopyBtn.textContent = '❌ Copy Failed';
+                    setTimeout(() => {
+                        newCopyBtn.textContent = '📋 Copy Log';
+                    }, 2000);
+                });
+            });
+        } else {
+            logSection.style.display = 'none';
+        }
+    }
+
     function updateEnhancedAWSStatus(enhancedStatus) {
         // Update the secret validation card with new structure
         const secretIcon = document.getElementById('secret-validation-icon');

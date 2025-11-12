@@ -407,6 +407,43 @@
     font-size: 11px;
 }
 
+.connection-log-section {
+    margin-top: 15px;
+    padding: 10px;
+    background-color: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 4px;
+}
+
+.connection-log-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--vscode-foreground);
+}
+
+.connection-log {
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 10px 0;
+    padding: 10px;
+    background-color: var(--vscode-terminal-background);
+    border-radius: 4px;
+    font-family: var(--vscode-editor-font-family);
+    font-size: 12px;
+}
+
+.connection-log pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: var(--vscode-terminal-foreground);
+}
+
+.connection-log-section .secondary-button {
+    margin-top: 5px;
+}
+
 .connection-status-card {
     background-color: var(--vscode-textCodeBlock-background);
     border: 1px solid var(--vscode-border-color);

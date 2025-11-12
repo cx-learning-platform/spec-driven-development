@@ -87,7 +87,7 @@ export class TaskMasterService {
                     const optionalFields = ['description', 'type', 'estimation', 'priority', 'status'];
                     const missingOptionalFields = optionalFields.filter(field => !task[field]);
                     if (missingOptionalFields.length > 0) {
-                        console.log(`Task ${task.title}: Missing optional fields (${missingOptionalFields.join(', ')}) - will need to be filled manually`);
+                        console.log(`[SDD:TaskMaster] INFO | Task ${task.title}: Missing optional fields (${missingOptionalFields.join(', ')}) - will need to be filled manually`);
                     }
                 } catch (error) {
                     const errorMessage = error instanceof Error ? error.message : 'Unknown validation error';

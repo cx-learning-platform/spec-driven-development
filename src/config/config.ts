@@ -4,8 +4,10 @@
  */
 export const CONFIG = {
     salesforce: {
+        // authUrl: 'https://test.salesforce.com/services/oauth2/token',
+        // baseUrl: 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com',
         authUrl: 'https://test.salesforce.com/services/oauth2/token',
-        baseUrl: 'https://ciscolearningservices--secqa.sandbox.my.salesforce-setup.com',
+        baseUrl: 'https://ciscolearningservices--clnuat4.sandbox.my.salesforce-setup.com',
         apiVersion: 'v56.0'
     },
     

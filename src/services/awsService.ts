@@ -36,6 +36,7 @@ export class AWSService {
         connected: false,
         status: 'disconnected'
     };
+    private connectionLog: string[] = []; // Track connection steps for debugging
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -43,6 +44,68 @@ export class AWSService {
         this.currentRegion = this.getConfiguredRegion();
         // Restore selected profile from previous session
         this.selectedProfile = this.context.globalState.get<string>('specDrivenDevelopment.awsSelectedProfile', '');
+    }
+
+    /**
+     * Log connection steps for debugging
+     */
+    private logConnectionStep(message: string, level: 'info' | 'warn' | 'error' = 'info'): void {
+        const timestamp = new Date().toISOString();
+        const logMessage = `[SDD:AWS] ${level.toUpperCase()} | [${timestamp}] ${message}`;
+        this.connectionLog.push(logMessage);
+        console.log(logMessage);
+        
+        // Don't show error messages to user here - let the command handler do it
+    }
+
+    /**
+     * Get connection log for debugging
+     */
+    public getConnectionLog(): string[] {
+        return this.connectionLog;
+    }
+
+    /**
+     * Clear connection log
+     */
+    public clearConnectionLog(): void {
+        this.connectionLog = [];
+    }
+
+    /**
+     * Provide troubleshooting suggestions based on error message
+     */
+    private provideTroubleshootingSuggestions(errorMessage: string): void {
+        this.logConnectionStep('=== Troubleshooting Suggestions ===', 'warn');
+        
+        if (errorMessage.includes('credentials not found') || errorMessage.includes('access_key')) {
+            this.logConnectionStep('⚠ AWS credentials issue detected:', 'warn');
+            this.logConnectionStep(`  • Check if AWS CLI is configured: run 'aws configure list'`, 'warn');
+            this.logConnectionStep(`  • Current profile: "${this.currentProfile || 'default'}"`, 'warn');
+            this.logConnectionStep(`  • Try running: 'aws configure --profile ${this.currentProfile || 'default'}'`, 'warn');
+        }
+        
+        if (errorMessage.includes('region')) {
+            this.logConnectionStep('⚠ AWS region issue detected:', 'warn');
+            this.logConnectionStep(`  • Current region: "${this.currentRegion || 'not set - using AWS CLI default'}"`, 'warn');
+            this.logConnectionStep(`  • Common regions: us-east-1, us-west-2, eu-west-1`, 'warn');
+            this.logConnectionStep(`  • Update in .env file: SALESFORCE_SECRET_NAME=your-secret-name`, 'warn');
+            this.logConnectionStep(`  • Or VS Code settings: specDrivenDevelopment.awsRegion`, 'warn');
+        }
+        
+        if (errorMessage.includes('secret')) {
+            this.logConnectionStep('⚠ Secrets Manager issue detected:', 'warn');
+            this.logConnectionStep(`  • Secret name: "${this.getConfiguredSalesforceSecretName()}"`, 'warn');
+            this.logConnectionStep(`  • Region: "${this.currentRegion || 'AWS CLI default'}"`, 'warn');
+            this.logConnectionStep(`  • Try listing secrets: 'aws secretsmanager list-secrets --region ${this.currentRegion || 'us-east-1'}'`, 'warn');
+        }
+        
+        if (errorMessage.includes('Access Denied') || errorMessage.includes('UnauthorizedException')) {
+            this.logConnectionStep('⚠ Permission issue detected:', 'warn');
+            this.logConnectionStep(`  • Current IAM user/role may lack Secrets Manager permissions`, 'warn');
+            this.logConnectionStep(`  • Required permission: secretsmanager:GetSecretValue`, 'warn');
+            this.logConnectionStep(`  • Required permission: secretsmanager:ListSecrets`, 'warn');
+        }
     }
 
     private getConfiguredProfile(): string {
@@ -110,7 +173,7 @@ export class AWSService {
             
             return undefined;
         } catch (error) {
-            console.warn(`Failed to read .env file: ${(error as Error).message}`);
+            console.warn(`[SDD:AWS] WARN | Failed to read .env file: ${(error as Error).message}`);
             return undefined;
         }
     }
@@ -122,18 +185,6 @@ export class AWSService {
         
         const configuredSecret = vscode.workspace.getConfiguration('specDrivenDevelopment').get('salesforceSecretName', '');
         return configuredSecret || CONFIG.aws.secretsManager.defaultSecretName;
-    }
-
-    private getConfiguredSalesforceKeywords(): string[] {
-        // Priority: .env file > VS Code settings > default
-        const envValue = this.readFromEnvFile('SALESFORCE_SECRET_KEYWORDS');
-        if (envValue) {
-            // Parse comma-separated keywords from env file
-            return envValue.split(',').map(k => k.trim()).filter(k => k.length > 0);
-        }
-        
-        const configuredKeywords = vscode.workspace.getConfiguration('specDrivenDevelopment').get('salesforceSecretKeywords', []);
-        return configuredKeywords.length > 0 ? configuredKeywords : ['salesforce', 'sf', 'crm', 'sales', 'force'];
     }
 
     private buildAwsCommand(baseCommand: string, profile?: string, region?: string): string {
@@ -154,6 +205,9 @@ export class AWSService {
     }
 
     public async connectToAWS(): Promise<AWSConnectionStatus> {
+        this.clearConnectionLog();
+        this.logConnectionStep('=== Starting AWS Connection ===');
+        
         try {
             // Show progress indicator
             return await vscode.window.withProgress({
@@ -169,35 +223,65 @@ export class AWSService {
                         'Yes', 'No'
                     );
                     if (reconnect !== 'Yes') {
+                        this.logConnectionStep('User chose not to refresh existing connection');
                         return this.connectionStatus;
                     }
+                    this.logConnectionStep('Refreshing existing AWS connection');
                 }
 
                 progress.report({ increment: 10, message: "Checking AWS CLI installation..." });
+                this.logConnectionStep('Step 1/5: Checking AWS CLI installation...');
 
                 // 1. Check AWS CLI installation
                 const isInstalled = await this.checkAWSCliInstalled();
                 if (!isInstalled) {
-                    throw new Error(
-                        'AWS CLI is not installed. Please install it from: https://aws.amazon.com/cli/'
-                    );
+                    const errorMsg = 'AWS CLI is not installed. Please install it from: https://aws.amazon.com/cli/';
+                    this.logConnectionStep(errorMsg, 'error');
+                    throw new Error(errorMsg);
                 }
+                this.logConnectionStep('✓ AWS CLI is installed');
 
                 progress.report({ increment: 20, message: "Validating credentials..." });
+                this.logConnectionStep('Step 2/5: Validating AWS credentials...');
+
+                // Log configured profile and region
+                const profileMsg = this.currentProfile || 'default';
+                const regionMsg = this.currentRegion || 'AWS CLI default';
+                this.logConnectionStep(`Configured AWS Profile: "${profileMsg}"`);
+                this.logConnectionStep(`Configured AWS Region: "${regionMsg}"`);
 
                 // 2. Test AWS credentials with profile priority
                 try {
                     this.selectedProfile = await this.testAWSCliWithProfiles();
-                    console.log(`Selected AWS profile: ${this.selectedProfile}`);
+                    this.logConnectionStep(`✓ Successfully authenticated with profile: "${this.selectedProfile}"`);
+                    console.log(`[SDD:AWS] INFO | Selected AWS profile: ${this.selectedProfile}`);
                 } catch (error: any) {
+                    this.logConnectionStep(`❌ Authentication failed: ${error.message}`, 'error');
+                    this.provideTroubleshootingSuggestions(error.message);
                     throw new Error(error.message);
                 }
 
                 progress.report({ increment: 30, message: "Fetching account info..." });
+                this.logConnectionStep('Step 3/5: Fetching AWS account information...');
 
                 const callerIdentity = await this.getAWSCallerIdentity();
+                this.logConnectionStep(`✓ Connected to AWS Account: ${callerIdentity.Account}`);
+                
+                // Get actual region being used if not configured
+                let actualRegion = this.currentRegion;
+                if (!actualRegion) {
+                    try {
+                        const regionCommand = this.buildAwsCommand('aws configure get region');
+                        const { stdout: regionOutput } = await execAsync(regionCommand);
+                        actualRegion = regionOutput.trim() || 'us-east-1'; // Default to us-east-1 if not set
+                    } catch {
+                        actualRegion = 'us-east-1'; // Default to us-east-1 on error
+                    }
+                }
+                this.logConnectionStep(`✓ Active Region: ${actualRegion}`);
                 
                 progress.report({ increment: 50, message: "Searching for Salesforce credentials..." });
+                this.logConnectionStep('Step 4/5: Searching for Salesforce credentials in Secrets Manager...');
 
                 // Try to fetch Salesforce credentials, but don't fail if they're not found
                 let salesforceCredentialsAvailable = false;
@@ -206,24 +290,29 @@ export class AWSService {
                     this.salesforceCredentials = await this.fetchSalesforceCredentials();
                     
                     progress.report({ increment: 80, message: "Validating credentials..." });
+                    this.logConnectionStep('Step 5/5: Validating Salesforce credentials...');
                     
                     // 4. Robust validation
                     this.validateSalesforceCredentials(this.salesforceCredentials);
                     salesforceCredentialsAvailable = true;
+                    this.logConnectionStep('✓ Successfully validated Salesforce credentials');
                 } catch (credError) {
-                    console.warn('Salesforce credentials not available:', (credError as Error).message);
-                    credentialError = (credError as Error).message;
+                    const errorMsg = (credError as Error).message;
+                    this.logConnectionStep(`⚠ Salesforce credentials issue: ${errorMsg}`, 'warn');
+                    console.warn(`[SDD:AWS] WARN | Salesforce credentials not available: ${errorMsg}`);
+                    credentialError = errorMsg;
                     // Continue without Salesforce credentials - they can be fetched later if needed
                 }
 
                 progress.report({ increment: 90, message: "Saving connection state..." });
+                this.logConnectionStep('Saving connection state...');
                 
                 // 5. Update connection state
                 this.connectionStatus = {
                     connected: true,
                     status: 'connected',
                     account: callerIdentity.Account,
-                    region: this.currentRegion,
+                    region: actualRegion,
                     profile: this.selectedProfile, // Use the profile that actually worked
                     secretsManagerAccess: true,
                     sessionExpiry: new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
@@ -235,14 +324,18 @@ export class AWSService {
                 await this.context.globalState.update('specDrivenDevelopment.awsSelectedProfile', this.selectedProfile);
 
                 progress.report({ increment: 100, message: "Connected!" });
+                this.logConnectionStep('=== AWS Connection Successful ===');
 
                 return this.connectionStatus;
             });
         } catch (error) {
+            const errorMessage = (error as Error).message;
+            this.logConnectionStep(`❌ Connection failed: ${errorMessage}`, 'error');
+            
             const errorStatus: AWSConnectionStatus = {
                 connected: false,
                 status: 'error',
-                error: (error as Error).message
+                error: errorMessage
             };
             this.connectionStatus = errorStatus;
             throw error;
@@ -406,7 +499,7 @@ export class AWSService {
                     : `aws sts get-caller-identity --profile ${profile}`;
                 
                 await execAsync(command);
-                console.log(`Successfully connected using profile: ${profile}`);
+                console.log(`[SDD:AWS] INFO | Successfully connected using profile: ${profile}`);
                 
                 // Warn if not using configured profile
                 if (this.currentProfile && profile !== this.currentProfile) {
@@ -475,55 +568,62 @@ export class AWSService {
             const profileMsg = this.currentProfile ? ` profile: ${this.currentProfile}` : ' default profile';
             const regionMsg = this.currentRegion ? ` region: ${this.currentRegion}` : ' default region';
             const configuredSecretName = this.getConfiguredSalesforceSecretName();
-            const fallbackKeywords = this.getConfiguredSalesforceKeywords();
             
-            console.log(`Looking for Salesforce secret: "${configuredSecretName}" in${profileMsg},${regionMsg}`);
+            this.logConnectionStep(`Searching for Salesforce secret: "${configuredSecretName}"`);
+            this.logConnectionStep(`Using${profileMsg},${regionMsg}`);
+            console.log(`[SDD:AWS] INFO | Looking for Salesforce secret: "${configuredSecretName}" in${profileMsg},${regionMsg}`);
             
             const listCommand = this.buildAwsCommand('aws secretsmanager list-secrets');
             const { stdout: listOutput } = await execAsync(listCommand);
             const secretsList = JSON.parse(listOutput.trim());
             
-            console.log(`Found ${secretsList.SecretList.length} secrets total`);
+            this.logConnectionStep(`Found ${secretsList.SecretList.length} total secrets in Secrets Manager`);
+            console.log(`[SDD:AWS] INFO | Found ${secretsList.SecretList.length} secrets total`);
+            
+            // Log available secrets for debugging
+            if (secretsList.SecretList.length > 0) {
+                this.logConnectionStep('Available secrets:');
+                secretsList.SecretList.forEach((secret: any) => {
+                    this.logConnectionStep(`  • ${secret.Name}`);
+                });
+            }
             
             // First, look for exact match with configured secret name
             let salesforceSecret = secretsList.SecretList.find((secret: any) => 
                 secret.Name.toLowerCase() === configuredSecretName.toLowerCase()
             );
             
+            if (salesforceSecret) {
+                this.logConnectionStep(`✓ Found exact match: "${salesforceSecret.Name}"`);
+            }
+            
             // If exact match not found, try partial match with configured secret name
             if (!salesforceSecret) {
+                this.logConnectionStep(`Exact match not found, trying partial match for "${configuredSecretName}"...`);
                 salesforceSecret = secretsList.SecretList.find((secret: any) => 
                     secret.Name.toLowerCase().includes(configuredSecretName.toLowerCase())
                 );
-            }
-            
-            // If still not found, ask user before trying fallback keywords
-            if (!salesforceSecret) {
-                const fallback = await vscode.window.showWarningMessage(
-                    `Secret "${configuredSecretName}" not found. Search using keywords [${fallbackKeywords.join(', ')}]?`,
-                    'Yes', 'No'
-                );
                 
-                if (fallback === 'Yes') {
-                    console.log(`Trying fallback keywords: ${fallbackKeywords.join(', ')}`);
-                    salesforceSecret = secretsList.SecretList.find((secret: any) => {
-                        const name = secret.Name.toLowerCase();
-                        return fallbackKeywords.some(keyword => name.includes(keyword.toLowerCase()));
-                    });
+                if (salesforceSecret) {
+                    this.logConnectionStep(`✓ Found partial match: "${salesforceSecret.Name}"`);
                 }
             }
             
             if (!salesforceSecret) {
                 const availableSecrets = secretsList.SecretList.map((s: any) => s.Name);
+                const errorMsg = `No Salesforce secret found matching "${configuredSecretName}" in${regionMsg}`;
+                this.logConnectionStep(errorMsg, 'error');
+                this.logConnectionStep(`Available secrets (${availableSecrets.length}): ${availableSecrets.join(', ') || 'None'}`, 'error');
+                
                 throw new Error(
-                    `No secret found matching "${configuredSecretName}" or fallback keywords [${fallbackKeywords.join(', ')}]. ` +
-                    `Available secrets (${availableSecrets.length}): ${availableSecrets.join(', ') || 'None'}. ` +
-                    `Looking in${regionMsg},${profileMsg}. ` +
-                    `Please update the "specDrivenDevelopment.salesforceSecretName" setting or create a secret with the configured name.`
+                    `${errorMsg}. ` +
+                    `Available secrets: ${availableSecrets.join(', ') || 'None'}. ` +
+                    `Update "specDrivenDevelopment.salesforceSecretName" or create a secret with the configured name.`
                 );
             }
             
-            console.log(`Using secret: ${salesforceSecret.Name}`);
+            this.logConnectionStep(`Retrieving secret value for: "${salesforceSecret.Name}"`);
+            console.log(`[SDD:AWS] INFO | Using secret: ${salesforceSecret.Name}`);
             const secretName = salesforceSecret.Name;
             const command = this.buildAwsCommand(`aws secretsmanager get-secret-value --secret-id "${secretName}"`);
             const { stdout } = await execAsync(command);
@@ -543,8 +643,23 @@ export class AWSService {
             
             const credentials = JSON.parse(secretString);
             
+            this.logConnectionStep(`✓ Successfully parsed Salesforce credentials`);
+            this.logConnectionStep(`  • Username: ${credentials.username}`);
+            this.logConnectionStep(`  • Has client_id: ${!!credentials.client_id}`);
+            this.logConnectionStep(`  • Has client_secret: ${!!credentials.client_secret}`);
+            this.logConnectionStep(`  • Has password: ${!!credentials.password}`);
+            
             if (!credentials.client_id || !credentials.client_secret || !credentials.username || !credentials.password) {
-                throw new Error(`Salesforce secret '${secretName}' is missing required fields (client_id, client_secret, username, password). Found fields: ${Object.keys(credentials).join(', ')}`);
+                const missingFields: string[] = [];
+                if (!credentials.client_id) missingFields.push('client_id');
+                if (!credentials.client_secret) missingFields.push('client_secret');
+                if (!credentials.username) missingFields.push('username');
+                if (!credentials.password) missingFields.push('password');
+                
+                throw new Error(
+                    `Salesforce secret '${secretName}' is missing required fields: ${missingFields.join(', ')}. ` +
+                    `Found fields: ${Object.keys(credentials).join(', ')}`
+                );
             }
             
             return {
@@ -560,6 +675,7 @@ export class AWSService {
                 this.handleExpiredTokenError();
                 throw new Error('AWS session token expired. Please refresh your credentials.');
             }
+            this.logConnectionStep(`Failed to fetch Salesforce credentials: ${(error as Error).message}`, 'error');
             throw new Error(`Failed to fetch Salesforce credentials: ${(error as Error).message}`);
         }
     }

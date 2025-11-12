@@ -152,7 +152,7 @@ export class EstimationParser {
                         processedTexts.add(estimation.originalText);
                     }
                 } catch (error) {
-                    console.warn('Failed to parse estimation:', error);
+                    console.warn('[SDD:Estimation] WARN | Failed to parse estimation:', error);
                 }
             }
         }
@@ -274,7 +274,7 @@ export class EstimationParser {
                 await this.context.globalState.update('specDrivenDevelopment.estimationHistory', updatedHistory);
             }
         } catch (error) {
-            console.error('Failed to cache estimations:', error);
+            console.error('[SDD:Estimation] ERROR | Failed to cache estimations:', error);
         }
     }
 
@@ -350,7 +350,7 @@ export class EstimationParser {
      * This method can be called when user receives response from copilot chat
      */
     public async parseCopilotChatResponse(chatResponse: string): Promise<EstimationData[]> {
-        console.log('Parsing Copilot chat response for estimations...');
+        console.log('[SDD:Estimation] INFO | Parsing Copilot chat response for estimations...');
         
         const estimations = this.parseText(chatResponse, 'GitHub Copilot Chat');
         
@@ -359,13 +359,13 @@ export class EstimationParser {
             
             // Automatically update the JIRA tab with the parsed estimation
             const bestEstimation = estimations[0];
-            console.log(`Found estimation: ${bestEstimation.originalText} = ${bestEstimation.normalizedValue} hours`);
+            console.log(`[SDD:Estimation] INFO | Found estimation: ${bestEstimation.originalText} = ${bestEstimation.normalizedValue} hours`);
             
             // Notify the webview to update the estimation
             try {
                 vscode.commands.executeCommand('specDrivenDevelopment.updateEstimationData', bestEstimation);
             } catch (error) {
-                console.warn('Failed to update estimation data:', error);
+                console.warn('[SDD:Estimation] WARN | Failed to update estimation data:', error);
             }
             
             // Show notification to user
@@ -379,7 +379,7 @@ export class EstimationParser {
                 }
             });
         } else {
-            console.log('No estimations found in Copilot response');
+            console.log('[SDD:Estimation] INFO | No estimations found in Copilot response');
         }
         
         return estimations;
@@ -414,7 +414,7 @@ export class EstimationParser {
                 }
             }
         } catch (error) {
-            console.warn('Could not read clipboard:', error);
+            console.warn('[SDD:Estimation] WARN | Could not read clipboard:', error);
         }
     }
 
