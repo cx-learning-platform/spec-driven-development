@@ -15,3 +15,8 @@ Thumbs.db
 # Note: These files enhance GitHub Copilot with project-specific guidance.
 # They are excluded to keep your repository clean and focused on your code.
 # The extension will recreate them as needed when analyzing code.
+.spec-driven-development/
+
+# Note: These files enhance GitHub Copilot with project-specific guidance.
+# They are excluded to keep your repository clean and focused on your code.
+# The extension will recreate them as needed when analyzing code.
