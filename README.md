@@ -46,11 +46,19 @@ npm run compile
 ```
 
 **Step 3: Run the Extension**
-1. Press **`Fn+F5`** (or **`F5`** on some keyboards) in VS Code
-2. This opens a new **Extension Development Host** window
-3. The extension is now running in the test instance
-4. Make changes to code, run `npm run compile` again, then reload the test window (`Ctrl+R`)
+```bash
+npm run package
 
+code --install-extension spec-driven-development-1.0.0.vsix 
+and do Window Reload (Fn + F5)
+```
+
+---
+
+## To uninstall the extension
+```bash
+code --uninstall-extension Gen-Ai-publisher.spec-driven-development 
+```
 
 ---
 
