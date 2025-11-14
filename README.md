@@ -22,6 +22,9 @@
 
 ### 🚀 **Development Setup**
 
+**Vidcast:** [Setup & Usage Video](https://app.vidcast.io/share/9e062996-a2fc-424d-96de-fe637c2b49c3)
+
+
 **Step 0: Connect to AWS Development Account**
 ```
 Windows:
@@ -50,14 +53,15 @@ npm run compile
 npm run package
 
 code --install-extension spec-driven-development-1.0.0.vsix 
-and do Window Reload (Fn + F5)
+
 ```
 
 ---
 
 ## To uninstall the extension
 ```bash
-code --uninstall-extension Gen-Ai-publisher.spec-driven-development 
+code --uninstall-extension Gen-Ai-publisher.spec-driven-development
+and using Command Palette (Ctrl+Shift+P) and select "Developer: Reload Window".
 ```
 
 ---
