@@ -35,6 +35,7 @@ export interface FeedbackData {
     feedbackType: 'Story' | 'Bug' | 'Defect';
     acceptanceCriteria?: string; // Only for Story type
     initiativeId: string;
+    jiraComponent: string; // JIRA Component field
     epicId: string;
     workType?: string; // Work Type field
     jiraPriority?: string; // JIRA Priority field
@@ -561,6 +562,7 @@ export class FeedbackService {
                 Estimated_Effort_Hours__c: feedbackData.estimatedHours,
                 Type__c: feedbackData.feedbackType,
                 Initiative__c: feedbackData.initiativeId,
+                Jira_Component__c: feedbackData.jiraComponent,
                 Epic__c: feedbackData.epicId,
                 From_External_VS__c: true,
                 Assignee_through_VS__c: username
@@ -772,6 +774,13 @@ export class FeedbackService {
             };
         }
 
+        if (!data.jiraComponent || data.jiraComponent.trim() === '') {
+            return {
+                isValid: false,
+                error: 'Please select a JIRA Component'
+            };
+        }
+
         if (!data.epicId || data.epicId.trim() === '') {
             return {
                 isValid: false,
@@ -913,18 +922,25 @@ export class FeedbackService {
      * API 15: Get Initiatives from Application Name
      * Queries App_Items__c to find initiatives linked to the application
      */
-    public async getInitiativesFromApplication(applicationName: string): Promise<Array<{ id: string; name: string; jiraTeam: string }>> {
+    public async getInitiativesFromApplication(applicationName: string): Promise<Array<{ id: string; name: string; jiraTeam: string; jiraComponent: string }>> {
         try {
             console.log('[SDD:Feedback] INFO | Getting initiatives for application:', applicationName);
             const token = await this.getAccessTokenWithRetryAndProtection();
 
             // API 15: Query App_Items__c
+            // const query = encodeURIComponent(
+            //     `SELECT id, name, Initiative__c, App__r.Name, Initiative__r.Id, Initiative__r.Name, Initiative__r.Jira_Team__c ` +
+            //     `FROM App_Items__c ` + 
+            //     `where Initiative__r.Updated_Initiative__c =true` +
+            //     `AND App__r.Name = '${applicationName.replace(/'/g, "\\'")}'`
+            // );
+
             const query = encodeURIComponent(
-                `SELECT id, name, Initiative__c, App__r.Name, Initiative__r.Id, Initiative__r.Name, Initiative__r.Jira_Team__c ` +
-                `FROM App_Items__c ` +
+                `SELECT id, name, Initiative__c, App__r.Name, Initiative__r.Id, Initiative__r.Name, Initiative__r.Jira_Team__c, Initiative__r.Jira_Component__c ` +
+                `FROM App_Items__c ` + 
                 `WHERE Initiative__r.Updated_Initiative__c = true ` + // Added space after WHERE and before =
                 `AND App__r.Name = '${applicationName.replace(/'/g, "\\'")}'`
-            ); 
+               );
 
             const response = await fetchWithTimeout(getSalesforceQueryUrl(query), {
                 method: 'GET',
@@ -944,7 +960,8 @@ export class FeedbackService {
                 const initiatives = data.records.map((record: any) => ({
                     id: record.Initiative__r?.Id || record.Initiative__c || '',
                     name: record.Initiative__r?.Name || '',
-                    jiraTeam: record.Initiative__r?.Jira_Team__c || ''
+                    jiraTeam: record.Initiative__r?.Jira_Team__c || '',
+                    jiraComponent: record.Initiative__r?.Jira_Component__c || ''
                 })).filter((init: any) => init.id && init.name); // Filter out invalid records
 
                 console.log(`[SDD:Feedback] INFO | Found ${initiatives.length} initiatives for application`);
@@ -974,6 +991,7 @@ export class FeedbackService {
                 `SELECT id, name, Team_Name__c, Status__c ` +
                 `FROM Epic__c ` +
                 `WHERE Status__c != 'Done' ` +
+                // `AND Updated_Initiative__c = true ` +
                 `AND Team_Name__c LIKE '%${jiraTeam.replace(/'/g, "\\'")}%' ` +
                 `ORDER BY CreatedDate DESC`
             );
@@ -1021,10 +1039,11 @@ export class FeedbackService {
         success: boolean;
         repoName?: string;
         applicationName?: string;
-        initiatives: Array<{ id: string; name: string; jiraTeam: string }>;
+        initiatives: Array<{ id: string; name: string; jiraTeam: string; jiraComponent: string }>;
         recommendedInitiativeId?: string;
         recommendedInitiativeName?: string;
         jiraTeam?: string;
+        jiraComponent?: string;
         epics: Array<{ id: string; name: string; teamName: string; status: string }>;
         sprints: Array<{ id: string; name: string; recommended?: boolean }>;
         recommendedSprintId?: string;
@@ -1098,6 +1117,7 @@ export class FeedbackService {
             // Step 4: Select recommended initiative (first one or apply business logic)
             const recommendedInitiative = initiatives[0];
             const jiraTeam = recommendedInitiative.jiraTeam;
+            const jiraComponent = recommendedInitiative.jiraComponent;
 
             if (!jiraTeam) {
                 console.log('[SDD:Feedback] INFO | No Jira team found for initiative');
@@ -1108,6 +1128,7 @@ export class FeedbackService {
                     initiatives,
                     recommendedInitiativeId: recommendedInitiative.id,
                     recommendedInitiativeName: recommendedInitiative.name,
+                    jiraComponent,
                     epics: [],
                     sprints: [],
                     autoPopulated: true,
@@ -1140,6 +1161,7 @@ export class FeedbackService {
                 recommendedInitiativeId: recommendedInitiative.id,
                 recommendedInitiativeName: recommendedInitiative.name,
                 jiraTeam,
+                jiraComponent,
                 epics,
                 sprints,
                 recommendedSprintId: recommendedSprint?.id,

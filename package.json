@@ -103,6 +103,16 @@
         "category": "Spec Driven Development"
       },
       {
+        "command": "specDrivenDevelopment.resetTCState",
+        "title": "Reset Terms & Conditions State",
+        "category": "Spec Driven Development"
+      },
+      {
+        "command": "specDrivenDevelopment.showTCPopup",
+        "title": "Show Terms & Conditions Popup",
+        "category": "Spec Driven Development"
+      },
+      {
         "command": "specDrivenDevelopment.listAWSSecrets",
         "title": "List AWS Secrets",
         "category": "Spec Driven Development"

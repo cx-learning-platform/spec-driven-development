@@ -19,7 +19,8 @@ export const CONFIG = {
             feedbackDescribe: '/services/data/v56.0/sobjects/Feedback__c/describe',
             epic: '/services/data/v56.0/sobjects/Epic__c',
             epicDescribe: '/services/data/v56.0/sobjects/Epic__c/describe',
-            initiative: '/services/data/v56.0/sobjects/CX_Initiative__c'
+            initiative: '/services/data/v56.0/sobjects/CX_Initiative__c',
+            specDrivenUserDetails: '/services/data/v56.0/sobjects/Spec_Driven_User_Details__c'
         }
     },
     
@@ -47,6 +48,39 @@ export const CONFIG = {
         
         // Pattern to validate standalone JIRA ticket IDs like GAI-572, DEVSECOPS-12208, ABC123-999
         ticketIdPattern: /^[A-Z0-9]+-\d+$/i
+    },
+    
+    termsAndConditions: {
+        // Periodic display intervals (in milliseconds)
+        periodicIntervals: {
+            twiceDaily: 12 * 60 * 60 * 1000,      // 12 hours
+            thriceWeekly: 56 * 60 * 60 * 1000     // ~56 hours (3 times per week)
+        },
+        
+        // Timing constants for T&C behavior
+        timing: {
+            periodicCollectionInterval: 12 * 60 * 60 * 1000,  // 12 hours (twice a day)
+            disagreedRetryInterval: 3 * 24 * 60 * 60 * 1000,  // 3 days
+            agreedReminderInterval: 30 * 24 * 60 * 60 * 1000  // 30 days
+        },
+        
+        // Copilot-wrapper health check configuration
+        copilotWrapper: {
+            healthCheckUrl: 'http://localhost:4141/health',
+            healthCheckTimeout: 3000  // 3 seconds
+        },
+        
+        // Bill of Materials files to detect in workspace root
+        // Add new files here to include them in BOM detection
+        billOfMaterialsFiles: [
+            '.taskmaster',
+            '.devcontainer',
+            '.devbox',
+            '.spec-driven-development'
+        ],
+        
+        // Active periodic schedule to use ('twiceDaily' or 'thriceWeekly')
+        activeSchedule: 'twiceDaily' as 'twiceDaily' | 'thriceWeekly'
     }
 } as const;
 

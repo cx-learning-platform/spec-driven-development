@@ -206,7 +206,7 @@ export class TaskService {
 
             // Use the provided WIP query structure with pagination and user filter
             const query = encodeURIComponent(
-                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Status__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
+                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Status__c,Jira_Component__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
             console.log('[SDD:Task] INFO | WIP tickets Query:', query);
@@ -302,7 +302,7 @@ export class TaskService {
 
             // Use the existing query structure with pagination and user filter
             const query = encodeURIComponent(
-                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
+                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,Jira_Component__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
             console.log('[SDD:Task] INFO | Running tasks main query:', decodeURIComponent(query));
@@ -397,7 +397,7 @@ export class TaskService {
 
             // Query for Done tickets from Salesforce (API 13 pattern) with user filter
             const query = encodeURIComponent(
-                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
+                `SELECT Id,CreatedBy.Email,Delivery_Lifecycle__c,Epic__c,Name,Description__c,Estimated_Effort_Hours__c,Estimation_Completion_Date__c,Jira_Priority__c,CreatedDate,Jira_Link__c,Type__c,Jira_Sprint_Details__c,Work_Type__c,Jira_Acceptance_Criteria__c,Initiative__c,Deployment_Date__c,Status__c,Actual_Effort_Hours__c,Resolution__c,Jira_Component__c,AI_Adopted__c,From_External_VS__c,Assignee_through_VS__c FROM Feedback__c ${whereClause} ORDER BY CreatedDate DESC LIMIT ${limit} OFFSET ${offset}`
             );
 
             const response = await fetch(getSalesforceQueryUrl(query), {
