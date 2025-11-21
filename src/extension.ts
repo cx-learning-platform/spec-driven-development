@@ -15,6 +15,7 @@ import { TaskService } from './services/taskService';
 import { TaskMasterService, TaskMasterTask } from './services/taskMasterService';
 // GitHub configuration removed - only using Salesforce config now
 import { NotificationManager } from './services/notificationManager';
+import { TermsConditionsService } from './services/termsConditionsService';
 
 let instructionManager: InstructionManager;
 let promptManager: PromptManager;
@@ -29,6 +30,7 @@ let jiraService: JiraService;
 let feedbackService: FeedbackService;
 let taskService: TaskService;
 let notificationManager: NotificationManager;
+let termsConditionsService: TermsConditionsService;
 let awsStatusBarItem: vscode.StatusBarItem;
 
 // Module-level timeout variable for debouncing
@@ -82,6 +84,17 @@ export async function activate(context: vscode.ExtensionContext) {
         
         // Initialize notification manager
         notificationManager = NotificationManager.getInstance(context);
+
+        // Initialize Terms & Conditions service (requires UserService and FeedbackService)
+        termsConditionsService = new TermsConditionsService(context, userService, feedbackService);
+
+        // Start periodic data collection (if user has agreed)
+        await termsConditionsService.initializePeriodicCollection();
+
+        // Add to subscriptions for cleanup
+        context.subscriptions.push({
+            dispose: () => termsConditionsService.dispose()
+        });
 
         // Initialize UI providers
         specDrivenDevelopmentPanel = new SpecDrivenDevelopmentPanel(context);
@@ -646,6 +659,9 @@ function registerCommands(context: vscode.ExtensionContext) {
                     `• Profile: ${profile}\n` +
                     `• Secrets Manager: ${status.secretsManagerAccess ? 'Ready' : 'Not Available'}`
                 );
+
+                // Note: T&C check will happen after auto-populate completes
+                // to ensure application name is fetched from Hub
             }
             
             // Update status bar
@@ -914,12 +930,13 @@ function registerCommands(context: vscode.ExtensionContext) {
         try {
             console.log('[SDD:Core] INFO | Auto-populate from Git command triggered');
             
-            // Trigger username/email configuration along with git auto-population
-            console.log('[SDD:Core] INFO | Triggering username/email configuration for correct assignee...');
+            // Trigger username/email configuration - this will block until email is configured
+            console.log('[SDD:Core] INFO | Ensuring email is configured...');
             const userEmail = await userService.getUserEmail();
             const username = await userService.getUsernameFromEmail();
-            console.log(`[SDD:Core] INFO | User configured: ${userEmail} (username: ${username})`);
+            console.log(`[SDD:Core] INFO | Email configured: ${userEmail} (username: ${username})`);
             
+            // Now proceed with auto-populate (email is guaranteed to be configured)
             const result = await feedbackService.autoPopulateFromGit();
             
             if (specDrivenDevelopmentPanel) {
@@ -933,8 +950,30 @@ function registerCommands(context: vscode.ExtensionContext) {
             } else {
                 console.log(`[SDD:Core] INFO | Auto-population failed: ${result.fallbackReason}`);
             }
+
+            // After auto-populate completes (success or failure), check T&C
+            // This ensures we always ask for consent even if repo is not in Hub
+            setTimeout(async () => {
+                try {
+                    console.log('[SDD:Core] INFO | Checking T&C after auto-populate completion...');
+                    await termsConditionsService.checkAndShowTermsConditions();
+                } catch (error) {
+                    console.error('[SDD:Core] ERROR | Failed to check T&C:', error);
+                }
+            }, 500);
+
         } catch (error) {
             console.error('[SDD:Core] ERROR | Error in autoPopulateFromGitCommand:', error);
+            
+            // Even if auto-populate throws error, still check T&C
+            setTimeout(async () => {
+                try {
+                    console.log('[SDD:Core] INFO | Auto-populate error - checking T&C anyway...');
+                    await termsConditionsService.checkAndShowTermsConditions();
+                } catch (tcError) {
+                    console.error('[SDD:Core] ERROR | Failed to check T&C:', tcError);
+                }
+            }, 500);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendAutoPopulationResult({
                     success: false,
@@ -1964,6 +2003,9 @@ function registerCommands(context: vscode.ExtensionContext) {
                 // Don't trigger auto-detection popup - just confirm the configuration
                 console.log(`[SDD:Core] INFO | Email configuration updated: ${newEmail}`);
                 vscode.window.showInformationMessage(`✅ Email configured: ${newEmail}. You can now retrieve your tasks.`);
+                
+                // Note: T&C check is handled after AWS connection, not here
+                // to avoid duplicate popups
             }
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to configure email: ${(error as Error).message}`);
@@ -2034,6 +2076,26 @@ WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${use
         }
     });
 
+    // Terms & Conditions Commands
+    const resetTCStateCommand = vscode.commands.registerCommand('specDrivenDevelopment.resetTCState', async () => {
+        try {
+            await termsConditionsService.resetState();
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to reset T&C state: ${(error as Error).message}`);
+        }
+    });
+
+    const showTCPopupCommand = vscode.commands.registerCommand('specDrivenDevelopment.showTCPopup', async () => {
+        try {
+            const userChoice = await termsConditionsService.showTCPopup();
+            if (userChoice) {
+                await termsConditionsService.processUserConsent(userChoice);
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to show T&C popup: ${(error as Error).message}`);
+        }
+    });
+
     // Register all commands
     context.subscriptions.push(
         analyzeCodeCommand,
@@ -2048,6 +2110,8 @@ WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${use
         searchPromptsCommand,
         configureUserCommand,
         debugUserFilterCommand,
+        resetTCStateCommand,
+        showTCPopupCommand,
         // New Spec Driven Development Panel Commands
         openPanelCommand,
         connectAWSCommand,

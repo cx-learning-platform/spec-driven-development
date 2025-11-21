@@ -78,32 +78,71 @@ export class UserService {
         }
 
         // Step 3: No Git config found or not @cisco.com, prompt for manual configuration
+        // Keep prompting until user configures email (email is mandatory)
         console.log('[SDD:User] INFO | No valid Git email found, prompting for manual configuration...');
         
-        // Show prompt with action button
-        const shouldConfigure = await vscode.window.showWarningMessage(
-            '⚠️ Could not auto-detect @cisco.com email from Git configuration. Please configure your Cisco email manually.',
-            'Configure Email Now',
-            'Open Settings',
-            'Later'
-        );
-        
-        if (shouldConfigure === 'Configure Email Now') {
-            // Open the configure email command
-            vscode.commands.executeCommand('specDrivenDevelopment.configureUser');
-        } else if (shouldConfigure === 'Open Settings') {
-            // Open VS Code settings directly to the email configuration
-            vscode.commands.executeCommand('workbench.action.openSettings', 'specDrivenDevelopment.userEmail');
+        // Loop until email is configured
+        while (true) {
+            // Show notification with button (cleaner than modal)
+            const action = await vscode.window.showWarningMessage(
+                '⚠️ Email configuration required. Please configure your Cisco email to continue.',
+                'Configure Email Now'
+            );
+            
+            if (action === 'Configure Email Now') {
+                // Prompt for email input
+                const emailInput = await vscode.window.showInputBox({
+                    prompt: 'Enter your Cisco email address',
+                    placeHolder: 'your.name@cisco.com',
+                    ignoreFocusOut: true, // Prevent closing when clicking outside
+                    validateInput: (value: string) => {
+                        if (!value) {
+                            return 'Email is required';
+                        }
+                        
+                        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (!emailRegex.test(value)) {
+                            if (!value.includes('@')) {
+                                return 'Please include @ in your email address';
+                            }
+                            if (!value.includes('.')) {
+                                return 'Please include a domain (e.g., @cisco.com)';
+                            }
+                            return 'Please enter a valid email format';
+                        }
+                        
+                        if (!value.toLowerCase().endsWith('@cisco.com')) {
+                            return 'Please use your @cisco.com email address';
+                        }
+                        
+                        return null;
+                    }
+                });
+                
+                if (emailInput) {
+                    // Save the email and return it
+                    await vscode.workspace.getConfiguration('specDrivenDevelopment').update(
+                        'userEmail',
+                        emailInput,
+                        vscode.ConfigurationTarget.Global
+                    );
+                    
+                    console.log(`[SDD:User] INFO | ✅ Email configured: ${emailInput}`);
+                    this.cachedUserInfo = {
+                        email: emailInput,
+                        source: 'manual'
+                    };
+                    
+                    vscode.window.showInformationMessage(
+                        `✅ Email configured: ${emailInput}`
+                    );
+                    
+                    return emailInput;
+                }
+                // If user cancelled input, loop back to show notification again
+                console.log('[SDD:User] INFO | Email input cancelled, prompting again...');
+            }
         }
-
-        // Return placeholder (will block API calls until properly configured)
-        const placeholderEmail = 'user@company.com';
-        this.cachedUserInfo = {
-            email: placeholderEmail,
-            source: 'system'
-        };
-        
-        return placeholderEmail;
     }
 
 

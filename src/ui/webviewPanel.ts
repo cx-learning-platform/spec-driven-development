@@ -516,10 +516,34 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                 </div>
                                 
                                 <div class="input-group">
-                                    <label for="epic">Epic: <span class="required">*</span></label>
-                                    <select id="epic" required>
-                                        <option value="">Loading epics...</option>
+                                    <label for="jira-component">JIRA Component: <span class="required">*</span></label>
+                                    <select id="jira-component" required>
+                                        <option value="">Select JIRA Component...</option>
+                                        <option value="DevOps">DevOps</option>
+                                        <option value="SRE">SRE</option>
+                                        <option value="GenAI">GenAI</option>
+                                        <option value="DevSecOps-Defensive">DevSecOps-Defensive</option>
+                                        <option value="DevSecOps-Offensive">DevSecOps-Offensive</option>
+                                        <option value="Data Analytics">Data Analytics</option>
+                                        <option value="CloudOps">CloudOps</option>
                                     </select>
+                                </div>
+                                
+                                <div class="input-group">
+                                    <label for="epic">Epic: <span class="required">*</span></label>
+                                    <div class="searchable-dropdown" id="epic-dropdown-container">
+                                        <div class="searchable-dropdown-header" id="epic-dropdown-header">
+                                            <span id="epic-selected-text">Loading epics...</span>
+                                            <span class="dropdown-arrow">▼</span>
+                                        </div>
+                                        <div class="searchable-dropdown-content" id="epic-dropdown-content" style="display: none;">
+                                            <input type="text" class="epic-search-input" id="epic-search-input" placeholder="Search epics..." autocomplete="off" />
+                                            <div class="epic-options-list" id="epic-options-list">
+                                                <div class="epic-option" data-value="">Loading epics...</div>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" id="epic" name="epic" required />
+                                    </div>
                                 </div>
                                 
                                 <div class="input-group">
@@ -809,6 +833,11 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                             <div class="view-group">
                                                 <label>Work Type:</label>
                                                 <div class="view-value" id="view-work-type"></div>
+                                            </div>
+                                            
+                                            <div class="view-group">
+                                                <label>JIRA Component:</label>
+                                                <div class="view-value" id="view-jira-component"></div>
                                             </div>
                                             
                                             <div class="view-group">
