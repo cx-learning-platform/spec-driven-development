@@ -634,14 +634,8 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const connectAWSCommand = vscode.commands.registerCommand('specDrivenDevelopment.connectAWS', async () => {
         try {
-            const status = await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: 'Connecting to AWS...',
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ increment: 0, message: 'Testing AWS CLI credentials...' });
-                return await awsService.connectToAWS();
-            });
+            // Connection progress is handled inside awsService
+            const status = await awsService.connectToAWS();
             
             // Update UI with the status
             if (specDrivenDevelopmentPanel) {
@@ -856,14 +850,9 @@ function registerCommands(context: vscode.ExtensionContext) {
             const errorMessage = (error as Error).message;
             console.error('[SDD:Core] ERROR | Failed to load initiatives:', errorMessage);
             
-            // Send user-friendly error message to UI instead of showing intrusive popup
+            // Send user-friendly error message to UI - no popup notification
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendInitiativesError(errorMessage);
-            }
-            
-            // Only show VS Code notification for critical errors
-            if (errorMessage.includes('AWS connection') || errorMessage.includes('credentials')) {
-                vscode.window.showWarningMessage(`Initiatives unavailable: ${errorMessage}`);
             }
         }
     });
@@ -875,7 +864,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.sendEpics(epics);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load epics: ${(error as Error).message}`);
+            console.error('[SDD:Core] ERROR | Failed to load epics:', (error as Error).message);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendEpics([]);
             }
@@ -890,7 +879,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.sendEpics(epics);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load epics for initiative: ${(error as Error).message}`);
+            console.error('[SDD:Core] ERROR | Failed to load epics for initiative:', (error as Error).message);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendEpics([]);
             }
@@ -904,7 +893,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.sendSprintDetails(sprints);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load sprint details: ${(error as Error).message}`);
+            console.error('[SDD:Core] ERROR | Failed to load sprint details:', (error as Error).message);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendSprintDetails([]);
             }
@@ -919,7 +908,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 specDrivenDevelopmentPanel.sendSprintDetails(sprints);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load sprints for team: ${(error as Error).message}`);
+            console.error('[SDD:Core] ERROR | Failed to load sprints for team:', (error as Error).message);
             if (specDrivenDevelopmentPanel) {
                 specDrivenDevelopmentPanel.sendSprintDetails([]);
             }
@@ -1247,7 +1236,7 @@ function registerCommands(context: vscode.ExtensionContext) {
                 await vscode.window.showTextDocument(doc);
             }
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to load feedback history: ${(error as Error).message}`);
+            console.error('[SDD:Core] ERROR | Failed to load feedback history:', (error as Error).message);
         }
     });
 
@@ -2096,6 +2085,135 @@ WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${use
         }
     });
 
+    // Quick Feedback Commands
+    const submitQuickFeedbackCommand = vscode.commands.registerCommand('specDrivenDevelopment.submitQuickFeedback', async (data: any) => {
+        try {
+            // Get user email
+            const userEmail = await userService.getUserEmail();
+            const result = await feedbackService.submitSddFeedback(data, userEmail);
+            
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendQuickFeedbackResult(result);
+            }
+
+            if (result.success) {
+                vscode.window.showInformationMessage(`✅ Quick feedback submitted successfully! Ticket: ${result.ticketId || 'N/A'}`);
+            } else {
+                vscode.window.showErrorMessage(`❌ Failed to submit quick feedback: ${result.error}`);
+            }
+        } catch (error) {
+            const errorMessage = `Failed to submit quick feedback: ${(error as Error).message}`;
+            
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendQuickFeedbackResult({
+                    success: false,
+                    message: errorMessage,
+                    error: (error as Error).message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+            
+            vscode.window.showErrorMessage(errorMessage);
+        }
+    });
+
+    const retrieveQuickFeedbackCommand = vscode.commands.registerCommand('specDrivenDevelopment.retrieveQuickFeedback', async (options: any = {}) => {
+        try {
+            console.log('[SDD:Core] INFO | Retrieve quick feedback command triggered with options:', options);
+            
+            await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: 'Retrieving quick feedback...',
+                cancellable: false
+            }, async (progress) => {
+                progress.report({ increment: 20, message: 'Checking AWS connection...' });
+                console.log('[SDD:Core] INFO | Checking AWS connection status...');
+                
+                progress.report({ increment: 30, message: 'Fetching quick feedback from Salesforce...' });
+                console.log('[SDD:Core] INFO | Calling feedbackService.retrieveQuickFeedback()...');
+                
+                const result = await feedbackService.retrieveQuickFeedback(options);
+                console.log(`[SDD:Core] INFO | Retrieved ${result.feedbacks.length} quick feedback items (${result.totalCount} total):`, result);
+                
+                const foundStartRecord = (options.offset || 0) + 1;
+                const foundEndRecord = Math.min((options.offset || 0) + result.feedbacks.length, result.totalCount);
+                const foundRangeText = result.totalCount > 0 ? `${foundStartRecord}-${foundEndRecord} of ${result.totalCount}` : result.feedbacks.length.toString();
+                progress.report({ increment: 50, message: `Found ${foundRangeText} quick feedback items` });
+                
+                if (specDrivenDevelopmentPanel) {
+                    console.log('[SDD:Core] INFO | Sending quick feedback list to webview...');
+                    specDrivenDevelopmentPanel.sendQuickFeedbackList(result.feedbacks, {
+                        totalCount: result.totalCount,
+                        hasMore: result.hasMore,
+                        currentOffset: options.offset || 0,
+                        currentLimit: options.limit || 10,
+                        searchTerm: options.searchTerm
+                    });
+                } else {
+                    console.error('[SDD:Core] ERROR | specDrivenDevelopmentPanel is null');
+                }
+                
+                const searchText = options.searchTerm ? ` (search: "${options.searchTerm}")` : '';
+                const startRecord = (options.offset || 0) + 1;
+                const endRecord = Math.min((options.offset || 0) + result.feedbacks.length, result.totalCount);
+                const rangeText = result.totalCount > 0 ? `${startRecord}-${endRecord} of ${result.totalCount}` : result.feedbacks.length.toString();
+                vscode.window.showInformationMessage(`✅ Retrieved ${rangeText} quick feedback items${searchText}`);
+            });
+        } catch (error) {
+            console.error('[SDD:Core] ERROR | Error in retrieveQuickFeedbackCommand:', error);
+            
+            const errorMessage = (error as Error).message;
+            if (errorMessage.includes('User email not configured')) {
+                const action = await vscode.window.showErrorMessage(
+                    '❌ User email not configured. Configure your email to retrieve quick feedback.',
+                    'Configure Email'
+                );
+                if (action === 'Configure Email') {
+                    vscode.commands.executeCommand('specDrivenDevelopment.configureUser');
+                }
+            } else {
+                vscode.window.showErrorMessage(`Failed to retrieve quick feedback: ${errorMessage}`);
+            }
+            
+            if (specDrivenDevelopmentPanel) {
+                specDrivenDevelopmentPanel.sendQuickFeedbackList([], { totalCount: 0, hasMore: false, currentOffset: 0, currentLimit: 10 });
+            }
+        }
+    });
+
+    const deleteQuickFeedbackCommand = vscode.commands.registerCommand('specDrivenDevelopment.deleteQuickFeedback', async (data: any) => {
+        try {
+            const { feedbackId, feedbackName, ticketNumber } = data;
+            console.log('[SDD:Core] INFO | Delete quick feedback command triggered:', { feedbackId, feedbackName, ticketNumber });
+            
+            // Show confirmation dialog
+            const displayTicket = (ticketNumber && ticketNumber !== 'N/A' && ticketNumber !== 'TBD') ? ticketNumber : feedbackName;
+            const confirmed = await vscode.window.showWarningMessage(
+                `Are you sure you want to delete feedback "${feedbackName}" (${displayTicket})? This action cannot be undone.`,
+                { modal: true },
+                'Delete'
+            );
+            
+            if (confirmed !== 'Delete') {
+                console.log('[SDD:Core] INFO | Delete cancelled by user');
+                return;
+            }
+            
+            const result = await feedbackService.deleteQuickFeedback(feedbackId);
+            
+            if (result.success) {
+                vscode.window.showInformationMessage(`✅ Quick feedback "${displayTicket}" deleted successfully!`);
+                // Refresh the quick feedback list
+                vscode.commands.executeCommand('specDrivenDevelopment.retrieveQuickFeedback');
+            } else {
+                vscode.window.showErrorMessage(`❌ Failed to delete quick feedback: ${result.message}`);
+            }
+        } catch (error) {
+            console.error('[SDD:Core] ERROR | Delete quick feedback failed:', error);
+            vscode.window.showErrorMessage(`Failed to delete quick feedback: ${(error as Error).message}`);
+        }
+    });
+
     // Register all commands
     context.subscriptions.push(
         analyzeCodeCommand,
@@ -2147,7 +2265,11 @@ WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${use
         saveTaskUpdatesCommand,
         deleteTaskCommand,
         cleanupTaskCommand,
-        restoreTaskCommand
+        restoreTaskCommand,
+        // Quick Feedback Commands
+        submitQuickFeedbackCommand,
+        retrieveQuickFeedbackCommand,
+        deleteQuickFeedbackCommand
 
     );
 }

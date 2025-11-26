@@ -16,7 +16,8 @@
         editingTask: null, // Store currently editing task data
         currentTaskType: null, // Track which task list is currently displayed (wip, running, archived)
         availableTasks: [], // Store available TaskMaster tasks
-        currentImportedTask: null // Store currently imported TaskMaster task for duplicate checking
+        currentImportedTask: null, // Store currently imported TaskMaster task for duplicate checking
+        quickFeedbackPagination: null // Store quick feedback pagination state
     };
 
     // Unit conversion function
@@ -47,8 +48,26 @@
 
     // Initialize UI state to prevent glitches
     function initializeUIState() {
-        // Initialize secret validation to disconnected state
-        updateSecretValidationForDisconnected();
+        // Set initial clean loading state - don't show anything confusing
+        const statusText = document.getElementById('aws-status-text');
+        const statusDot = document.querySelector('.status-dot');
+        if (statusText) {
+            statusText.textContent = 'Checking connection status...';
+        }
+        if (statusDot) {
+            statusDot.className = 'status-dot'; // Remove any status classes
+        }
+        
+        // Keep secret validation and buttons hidden until we know the real state
+        const secretSection = document.getElementById('secret-validation-section');
+        const buttonGroup = document.getElementById('aws-button-group');
+        if (secretSection) {
+            secretSection.style.display = 'none';
+        }
+        if (buttonGroup) {
+            buttonGroup.style.display = 'none';
+        }
+        
         // Initialize feedback form state
         updateFeedbackFormState();
         // Ensure task edit modal is hidden on initialization
@@ -89,6 +108,13 @@
                 if (targetTab === 'feedback') {
                     configureUserForFeatures();
                 }
+                
+                // Auto-load quick feedback when Quick Feedback tab is opened
+                if (targetTab === 'quick-feedback') {
+                    if (currentState.awsStatus && currentState.awsStatus.connected) {
+                        loadQuickFeedbackList();
+                    }
+                }
             });
         });
     }
@@ -116,9 +142,9 @@
         connectBtn.addEventListener('click', () => {
             updateAWSStatus({ status: 'connecting' });
             showLoadingSteps([
-                'Loading AWS CLI credentials...',
-                'Testing Secrets Manager access...',
-                'Fetching Salesforce credentials...'
+                'Loading credentials...',
+                'Validating access...',
+                'Establishing connection...'
             ]);
             vscode.postMessage({ command: 'connectAWS' });
         });
@@ -250,6 +276,12 @@
         const feedbackTypeSelect = document.getElementById('feedback-type');
         const acceptanceCriteriaGroup = document.getElementById('acceptance-criteria-group');
 
+        // Quick Feedback event listeners
+        setupQuickFeedbackEventListeners();
+
+        // Setup searchable Epic dropdown
+        setupSearchableEpicDropdown();
+
         // Handle feedback type change to show/hide acceptance criteria
         feedbackTypeSelect.addEventListener('change', () => {
             if (feedbackTypeSelect.value === 'Story') {
@@ -262,18 +294,28 @@
             }
         });
 
-        // Handle initiative change - load epics for selected initiative's jira team
+        // Handle initiative change - load epics for selected initiative's jira team AND auto-populate JIRA Component
         const initiativeSelect = document.getElementById('initiative');
         initiativeSelect.addEventListener('change', () => {
-            const epicSelect = document.getElementById('epic');
             const selectedInitiativeId = initiativeSelect.value;
             
             if (!selectedInitiativeId) {
-                // No initiative selected, clear epics
-                epicSelect.innerHTML = '<option value="">Select Epic...</option>';
-                epicSelect.value = '';
+                // No initiative selected, clear epics and JIRA Component
+                const selectedText = document.getElementById('epic-selected-text');
+                const hiddenInput = document.getElementById('epic');
+                if (selectedText) selectedText.textContent = 'Select Epic...';
+                if (hiddenInput) hiddenInput.value = '';
+                
+                // Clear JIRA Component
+                const jiraComponentSelect = document.getElementById('jira-component');
+                if (jiraComponentSelect) {
+                    jiraComponentSelect.value = '';
+                }
                 return;
             }
+            
+            // Auto-populate JIRA Component based on selected initiative
+            autoPopulateJiraComponent(selectedInitiativeId);
             
             // Find the selected initiative's jiraTeam
             const selectedOption = initiativeSelect.options[initiativeSelect.selectedIndex];
@@ -340,6 +382,7 @@
                 feedbackType: document.getElementById('feedback-type').value,
                 estimatedHours: parseFloat(document.getElementById('estimated-hours').value),
                 initiativeId: document.getElementById('initiative').value,
+                jiraComponent: document.getElementById('jira-component').value,
                 epicId: document.getElementById('epic').value,
                 description: document.getElementById('feedback-description').value,
                 acceptanceCriteria: document.getElementById('acceptance-criteria').value,
@@ -350,10 +393,10 @@
 
             // Basic validation
             if (!feedbackData.name || !feedbackData.feedbackType || !feedbackData.estimatedHours || 
-                !feedbackData.initiativeId || !feedbackData.epicId || !feedbackData.description) {
+                !feedbackData.initiativeId || !feedbackData.jiraComponent || !feedbackData.epicId || !feedbackData.description) {
                 showFeedbackResult({
                     success: false,
-                    message: 'Please fill in all required fields',
+                    message: 'Please fill in all required fields (Name, Type, Estimated Hours, Initiative, JIRA Component, Epic, and Description)',
                     error: 'Validation failed'
                 });
                 return;
@@ -479,7 +522,7 @@
     function updateFeedbackFormState() {
         const submitBtn = document.getElementById('submit-feedback-btn');
         const loadDataBtn = document.getElementById('load-data-btn');
-        const epicSelect = document.getElementById('epic');
+        const epicHeader = document.getElementById('epic-dropdown-header');
         
         if (canSubmitFeedback()) {
             submitBtn.disabled = false;
@@ -491,9 +534,9 @@
             submitBtn.textContent = 'Connect to AWS First';
             
             // Ensure epic dropdown is disabled when AWS is not connected
-            if (epicSelect) {
-                epicSelect.disabled = true;
-                epicSelect.innerHTML = '<option value="">Connect to AWS first</option>';
+            if (epicHeader) {
+                epicHeader.style.pointerEvents = 'none';
+                epicHeader.style.opacity = '0.6';
             }
         }
     }
@@ -504,7 +547,14 @@
         document.getElementById('feedback-type').value = '';
         document.getElementById('estimated-hours').value = '';
         document.getElementById('initiative').value = '';
-        document.getElementById('epic').value = '';
+        document.getElementById('jira-component').value = '';
+        
+        // Clear searchable epic dropdown
+        const epicHiddenInput = document.getElementById('epic');
+        const epicSelectedText = document.getElementById('epic-selected-text');
+        if (epicHiddenInput) epicHiddenInput.value = '';
+        if (epicSelectedText) epicSelectedText.textContent = 'Select Epic...';
+        
         document.getElementById('feedback-description').value = '';
         document.getElementById('acceptance-criteria').value = '';
         document.getElementById('work-type').value = '';
@@ -626,6 +676,23 @@
         const disconnectBtn = document.getElementById('disconnect-aws-btn');
         const connectionDetails = document.getElementById('aws-connection-details');
         const loading = document.getElementById('aws-loading');
+        const secretSection = document.getElementById('secret-validation-section');
+        const buttonGroup = document.getElementById('aws-button-group');
+
+        // Show the UI elements now that we have real status
+        if (secretSection) {
+            secretSection.style.display = 'block';
+        }
+        if (buttonGroup) {
+            buttonGroup.style.display = 'block';
+        }
+        
+        // Clear error messages when status changes
+        const errorResult = document.getElementById('aws-error-result');
+        if (errorResult && status.status !== 'error') {
+            errorResult.style.display = 'none';
+            errorResult.innerHTML = '';
+        }
 
         // Update status indicator
         statusDot.className = 'status-dot';
@@ -722,132 +789,165 @@
     }
 
     function updateEnhancedAWSStatus(enhancedStatus) {
-        // Update the secret validation card with new structure
         const secretIcon = document.getElementById('secret-validation-icon');
         const secretTitle = document.getElementById('secret-validation-title');
         const secretStatusValue = document.getElementById('secret-status-value');
         const secretMissingFields = document.getElementById('secret-missing-fields');
-        const secretDetailsRow = document.getElementById('secret-details-row');
-        const secretDetailsValue = document.getElementById('secret-details-value');
+        const secretMissingRow = document.getElementById('secret-missing-row');
         
-        // Always process enhanced status regardless of current connection state
-        // This allows for proper error handling and status updates
-        
-        if (secretIcon && secretTitle && secretStatusValue && secretMissingFields) {
+        if (secretIcon && secretTitle && secretStatusValue) {
             switch (enhancedStatus.status) {
                 case 'ready':
-                    secretIcon.textContent = '✅';
-                    secretTitle.textContent = 'Secret Validation Complete';
-                    secretStatusValue.textContent = 'All required fields found';
-                    secretMissingFields.textContent = 'none';
+                    secretIcon.textContent = '';
+                    secretTitle.textContent = 'Credentials Valid';
+                    secretStatusValue.textContent = 'All required fields present';
+                    if (secretMissingRow) secretMissingRow.style.display = 'none';
                     break;
                 case 'secret-invalid':
-                    secretIcon.textContent = '⚠️';
-                    secretTitle.textContent = 'Secret Invalid';
+                    // Change main status to error when credentials are invalid
+                    updateMainStatusToError('Configuration Error', 'Missing required fields');
+                    secretIcon.textContent = '';
+                    secretTitle.textContent = 'Invalid Credentials';
                     secretStatusValue.textContent = 'Missing required fields';
-                    secretMissingFields.textContent = enhancedStatus.missingFields ? enhancedStatus.missingFields.join(', ') : 'Unknown fields';
+                    if (secretMissingFields) {
+                        secretMissingFields.textContent = enhancedStatus.missingFields ? enhancedStatus.missingFields.join(', ') : 'Unknown';
+                    }
+                    if (secretMissingRow) secretMissingRow.style.display = 'flex';
                     break;
                 case 'secret-not-found':
-                    secretIcon.textContent = '⚠️';
-                    secretTitle.textContent = 'Secret Not Found';
-                    secretStatusValue.textContent = 'Secret does not exist';
-                    secretMissingFields.textContent = 'N/A';
+                    // Change main status to error when credentials not found
+                    updateMainStatusToError('Configuration Error', 'Credentials not configured');
+                    secretIcon.textContent = '';
+                    secretTitle.textContent = 'Not Found';
+                    secretStatusValue.textContent = 'Credentials not configured';
+                    if (secretMissingRow) secretMissingRow.style.display = 'none';
                     break;
                 case 'aws-not-configured':
-                    secretIcon.textContent = '❌';
-                    secretTitle.textContent = 'AWS Not Configured';
-                    secretStatusValue.textContent = 'AWS CLI not configured';
-                    secretMissingFields.textContent = 'N/A';
+                    // Change main status to error when AWS not configured
+                    updateMainStatusToError('Configuration Error', 'AWS CLI not set up');
+                    secretIcon.textContent = '';
+                    secretTitle.textContent = 'Not Configured';
+                    secretStatusValue.textContent = 'AWS CLI not set up';
+                    if (secretMissingRow) secretMissingRow.style.display = 'none';
                     break;
                 case 'error':
-                    secretIcon.textContent = '❌';
+                    // Change main status to error
+                    updateMainStatusToError('Validation Error', 'Failed to validate');
+                    secretIcon.textContent = '';
                     secretTitle.textContent = 'Validation Error';
-                    secretStatusValue.textContent = 'Failed to validate secret';
-                    secretMissingFields.textContent = 'N/A';
+                    secretStatusValue.textContent = 'Failed to validate';
+                    if (secretMissingRow) secretMissingRow.style.display = 'none';
                     break;
                 default:
-                    secretIcon.textContent = '🔍';
-                    secretTitle.textContent = 'Checking Secret...';
-                    secretStatusValue.textContent = 'Validation in progress';
-                    secretMissingFields.textContent = 'Checking...';
-            }
-            
-            // Show details if available
-            if (enhancedStatus.details && secretDetailsRow && secretDetailsValue) {
-                secretDetailsValue.textContent = enhancedStatus.details;
-                secretDetailsRow.style.display = 'flex';
-            } else if (secretDetailsRow) {
-                secretDetailsRow.style.display = 'none';
+                    secretIcon.textContent = '';
+                    secretTitle.textContent = 'Validating...';
+                    secretStatusValue.textContent = 'Checking credentials';
+                    if (secretMissingRow) secretMissingRow.style.display = 'none';
             }
         }
         
-        // Update prerequisites based on enhanced status
         updatePrerequisites();
+    }
+
+    // Helper function to update main status to error state
+    function updateMainStatusToError(title, message) {
+        const statusIndicator = document.getElementById('aws-status-indicator');
+        const statusDot = statusIndicator?.querySelector('.status-dot');
+        const statusText = document.getElementById('aws-status-text');
+        const connectBtn = document.getElementById('connect-aws-btn');
+        const refreshBtn = document.getElementById('refresh-aws-btn');
+        const disconnectBtn = document.getElementById('disconnect-aws-btn');
+        const connectionDetails = document.getElementById('aws-connection-details');
+        const errorResult = document.getElementById('aws-error-result');
+        
+        if (statusDot) {
+            statusDot.className = 'status-dot status-disconnected';
+        }
+        if (statusText) {
+            statusText.textContent = `🔴 ${title}`;
+        }
+        if (connectBtn) connectBtn.style.display = 'inline-block';
+        if (refreshBtn) refreshBtn.style.display = 'none';
+        if (disconnectBtn) disconnectBtn.style.display = 'none';
+        if (connectionDetails) connectionDetails.style.display = 'none';
+        
+        // Display error message in the same format as Manage Features tab
+        if (errorResult) {
+            errorResult.className = 'feedback-result error';
+            errorResult.innerHTML = `
+                <div class="result-header">
+                    <span class="result-icon">❌</span>
+                    <span class="result-title">${title}</span>
+                </div>
+                <div class="result-details">
+                    <div class="result-item">
+                        <span class="result-label">Message:</span>
+                        <span class="result-value">${message}</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Action:</span>
+                        <span class="result-value">Please check your AWS credentials and configuration.</span>
+                    </div>
+                </div>
+            `;
+            errorResult.style.display = 'block';
+        }
     }
 
     function updateSecretValidationForConnecting() {
         const secretIcon = document.getElementById('secret-validation-icon');
         const secretTitle = document.getElementById('secret-validation-title');
         const secretStatusValue = document.getElementById('secret-status-value');
-        const secretMissingFields = document.getElementById('secret-missing-fields');
-        const secretDetailsRow = document.getElementById('secret-details-row');
+        const secretMissingRow = document.getElementById('secret-missing-row');
         
-        if (secretIcon) secretIcon.textContent = '🔄';
-        if (secretTitle) secretTitle.textContent = 'Preparing Validation...';
-        if (secretStatusValue) secretStatusValue.textContent = 'Establishing AWS connection';
-        if (secretMissingFields) secretMissingFields.textContent = 'Pending...';
-        if (secretDetailsRow) secretDetailsRow.style.display = 'none';
+        if (secretIcon) secretIcon.textContent = '';
+        if (secretTitle) secretTitle.textContent = 'Connecting...';
+        if (secretStatusValue) secretStatusValue.textContent = 'Establishing connection';
+        if (secretMissingRow) secretMissingRow.style.display = 'none';
     }
 
     function updateSecretValidationForError() {
         const secretIcon = document.getElementById('secret-validation-icon');
         const secretTitle = document.getElementById('secret-validation-title');
         const secretStatusValue = document.getElementById('secret-status-value');
-        const secretMissingFields = document.getElementById('secret-missing-fields');
-        const secretDetailsRow = document.getElementById('secret-details-row');
+        const secretMissingRow = document.getElementById('secret-missing-row');
         
-        if (secretIcon) secretIcon.textContent = '❌';
+        if (secretIcon) secretIcon.textContent = '';
         if (secretTitle) secretTitle.textContent = 'Connection Failed';
-        if (secretStatusValue) secretStatusValue.textContent = 'Unable to connect to AWS';
-        if (secretMissingFields) secretMissingFields.textContent = 'N/A';
-        if (secretDetailsRow) secretDetailsRow.style.display = 'none';
+        if (secretStatusValue) secretStatusValue.textContent = 'Unable to connect';
+        if (secretMissingRow) secretMissingRow.style.display = 'none';
     }
 
     function updateSecretValidationForDisconnected() {
         const secretIcon = document.getElementById('secret-validation-icon');
         const secretTitle = document.getElementById('secret-validation-title');
         const secretStatusValue = document.getElementById('secret-status-value');
-        const secretMissingFields = document.getElementById('secret-missing-fields');
-        const secretDetailsRow = document.getElementById('secret-details-row');
+        const secretMissingRow = document.getElementById('secret-missing-row');
         
-        if (secretIcon) secretIcon.textContent = '⏸️';
+        if (secretIcon) secretIcon.textContent = '';
         if (secretTitle) secretTitle.textContent = 'Not Connected';
-        if (secretStatusValue) secretStatusValue.textContent = 'Connect to AWS to validate';
-        if (secretMissingFields) secretMissingFields.textContent = 'N/A';
-        if (secretDetailsRow) secretDetailsRow.style.display = 'none';
+        if (secretStatusValue) secretStatusValue.textContent = 'Connect to validate credentials';
+        if (secretMissingRow) secretMissingRow.style.display = 'none';
     }
 
     function updateSecretValidationForValidating() {
         const secretIcon = document.getElementById('secret-validation-icon');
         const secretTitle = document.getElementById('secret-validation-title');
         const secretStatusValue = document.getElementById('secret-status-value');
-        const secretMissingFields = document.getElementById('secret-missing-fields');
-        const secretDetailsRow = document.getElementById('secret-details-row');
+        const secretMissingRow = document.getElementById('secret-missing-row');
         
-        if (secretIcon) secretIcon.textContent = '🔍';
-        if (secretTitle) secretTitle.textContent = 'Validating Secret...';
-        if (secretStatusValue) secretStatusValue.textContent = 'Checking Salesforce credentials';
-        if (secretMissingFields) secretMissingFields.textContent = 'Validating...';
-        if (secretDetailsRow) secretDetailsRow.style.display = 'none';
+        if (secretIcon) secretIcon.textContent = '';
+        if (secretTitle) secretTitle.textContent = 'Validating...';
+        if (secretStatusValue) secretStatusValue.textContent = 'Checking credentials';
+        if (secretMissingRow) secretMissingRow.style.display = 'none';
     }
 
     function updateConnectionDetails(status) {
         const detailsContent = document.getElementById('aws-details-content');
         const connectionTime = new Date().toLocaleTimeString();
         
-        // Calculate session expiry display
-        let sessionExpiryDisplay = 'Unknown';
-        let timeRemaining = '';
+        // Calculate session expiry
+        let sessionDisplay = 'Active';
         
         if (status.sessionExpiry) {
             const expiryDate = new Date(status.sessionExpiry);
@@ -859,36 +959,31 @@
                 const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
                 
                 if (hours > 0) {
-                    timeRemaining = `${hours}h ${minutes}m remaining`;
+                    sessionDisplay = `${hours}h ${minutes}m remaining`;
                 } else if (minutes > 0) {
-                    timeRemaining = `${minutes}m remaining`;
+                    sessionDisplay = `${minutes}m remaining`;
                 } else {
-                    timeRemaining = 'Expiring soon';
+                    sessionDisplay = 'Expiring soon';
                 }
-                sessionExpiryDisplay = timeRemaining;
             } else {
-                sessionExpiryDisplay = 'Session expired';
+                sessionDisplay = 'Expired';
             }
         }
         
         detailsContent.innerHTML = `
             <div class="connection-status-card">
                 <div class="connection-header">
-                    <span class="connection-icon">🔗</span>
-                    <span class="connection-title">AWS Connection Active</span>
+                    <span class="connection-icon"></span>
+                    <span class="connection-title">Active Connection</span>
                 </div>
                 <div class="connection-info">
                     <div class="info-row">
-                        <span class="info-label">Connected at:</span>
+                        <span class="info-label">Connected:</span>
                         <span class="info-value">${connectionTime}</span>
                     </div>
                     <div class="info-row">
-                        <span class="info-label">Session status:</span>
-                        <span class="info-value session-expiry">${sessionExpiryDisplay}</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">Services:</span>
-                        <span class="info-value">${status.secretsManagerAccess ? '✅ Secrets Manager Ready' : '❌ Limited Access'}</span>
+                        <span class="info-label">Session:</span>
+                        <span class="info-value session-expiry">${sessionDisplay}</span>
                     </div>
                 </div>
             </div>
@@ -987,7 +1082,7 @@
                     ${result.recordUrl ? `
                     <div class="result-item">
                         <span class="result-label">URL:</span>
-                        <span class="result-value"><a href="${result.recordUrl}" target="_blank">View in Salesforce</a></span>
+                        <span class="result-value"><a href="${result.recordUrl}" target="_blank">View in Hub</a></span>
                     </div>` : ''}
                 </div>
             `;
@@ -1030,13 +1125,14 @@
         }
         
         if (result.success) {
-            // Extract Jira ticket ID from Jira URL if available - supports any project format
+            // Extract Jira ticket ID from result - backend already handles extraction
             let displayTicketId = result.ticketId || 'N/A';
-            if (result.jiraUrl) {
-                const jiraTicketMatch = result.jiraUrl.match(/\/browse\/([A-Z0-9]+-\d+)/i);
-                if (jiraTicketMatch) {
-                    displayTicketId = jiraTicketMatch[1]; // Extract GAI-572, DEVSECOPS-12208, etc. from URL
-                }
+            
+            // Only show TBD if explicitly marked as TBD by backend
+            const isTBDTicket = result.isTBD === true || (result.jiraUrl === 'TBD' && result.ticketId === 'TBD');
+            
+            if (isTBDTicket) {
+                displayTicketId = 'TBD';
             }
             
             feedbackResult.className = 'feedback-result success';
@@ -1054,10 +1150,14 @@
                         <span class="result-label">Status:</span>
                         <span class="result-value">${result.message}</span>
                     </div>
-                    ${result.jiraUrl ? `
+                    ${result.devsecopsHubUrl ? `
                     <div class="result-item">
-                        <span class="result-label">JIRA Link:</span>
-                        <span class="result-value"><a href="${result.jiraUrl}" target="_blank">View in JIRA</a></span>
+                        <span class="result-label">Hub Link:</span>
+                        <span class="result-value"><a href="${result.devsecopsHubUrl}" target="_blank">View</a></span>
+                    </div>` : ''}
+                    ${isTBDTicket ? `
+                    <div class="result-item">
+                        <span>⚠️ Ticket is not created (TBD). Please delete this record from WIP Ticket Tab and create ticket again.</span>
                     </div>` : ''}
                 </div>
             `;
@@ -1173,7 +1273,7 @@
 
     // Populate initiatives dropdown
     function populateInitiativesDropdown(initiatives) {
-        // Store initiatives with jiraTeam data
+        // Store initiatives with jiraTeam and jiraComponent data
         currentState.allInitiatives = initiatives || [];
         
         const initiativeSelect = document.getElementById('initiative');
@@ -1195,6 +1295,10 @@
                 // Store jiraTeam as a data attribute
                 if (initiative.jiraTeam) {
                     option.setAttribute('data-jira-team', initiative.jiraTeam);
+                }
+                // Store jiraComponent as a data attribute
+                if (initiative.jiraComponent) {
+                    option.setAttribute('data-jira-component', initiative.jiraComponent);
                 }
                 initiativeSelect.appendChild(option);
             });
@@ -1223,60 +1327,65 @@
         
         console.warn('Failed to load initiatives:', error);
         
-        // Show a non-intrusive notification to the user
-        const notification = document.createElement('div');
-        notification.className = 'error-notification';
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--vscode-errorBackground);
-            color: var(--vscode-errorForeground);
-            padding: 8px 12px;
-            border-radius: 4px;
-            border: 1px solid var(--vscode-errorBorder);
-            font-size: 12px;
-            z-index: 1000;
-            max-width: 300px;
-        `;
-        notification.textContent = `Initiative loading failed: ${errorMessage}. TaskMaster import will still work.`;
-        
-        document.body.appendChild(notification);
-        
-        // Auto-remove notification after 8 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                document.body.removeChild(notification);
-            }
-        }, 8000);
+        // Error is already shown in dropdown - no need for floating notification
     }
 
-    // Populate epics dropdown
+    // Populate epics dropdown (searchable)
     function populateEpicsDropdown(epics) {
         // Store epics for reference
         currentState.allEpics = epics || [];
         
-        const epicSelect = document.getElementById('epic');
+        const optionsList = document.getElementById('epic-options-list');
+        const selectedText = document.getElementById('epic-selected-text');
+        const hiddenInput = document.getElementById('epic');
+        const header = document.getElementById('epic-dropdown-header');
         
-        if (!canSubmitFeedback()) {
-            epicSelect.innerHTML = '<option value="">Connect to AWS to load epics</option>';
-            epicSelect.disabled = true;
+        if (!optionsList || !selectedText || !hiddenInput) {
+            console.warn('Epic dropdown elements not found');
             return;
         }
         
-        epicSelect.disabled = false;
-        epicSelect.innerHTML = '<option value="">Select Epic...</option>';
+        if (!canSubmitFeedback()) {
+            optionsList.innerHTML = '<div class="epic-option" data-value="">Connect to AWS to load epics</div>';
+            selectedText.textContent = 'Connect to AWS to load epics';
+            header.style.pointerEvents = 'none';
+            header.style.opacity = '0.6';
+            return;
+        }
+        
+        header.style.pointerEvents = 'auto';
+        header.style.opacity = '1';
+        hiddenInput.value = '';
+        selectedText.textContent = 'Select Epic...';
+        optionsList.innerHTML = '';
         
         if (epics && epics.length > 0) {
-            // Show all epics - no filtering needed
+            // Add default option
+            const defaultOption = document.createElement('div');
+            defaultOption.className = 'epic-option';
+            defaultOption.setAttribute('data-value', '');
+            defaultOption.textContent = 'Select Epic...';
+            defaultOption.addEventListener('click', () => selectEpicOption('', 'Select Epic...'));
+            optionsList.appendChild(defaultOption);
+            
+            // Add epic options
             epics.forEach(epic => {
-                const option = document.createElement('option');
-                option.value = epic.id;
+                const option = document.createElement('div');
+                option.className = 'epic-option';
+                option.setAttribute('data-value', epic.id);
                 option.textContent = `${epic.name}${epic.teamName ? ' (' + epic.teamName + ')' : ''}`;
-                epicSelect.appendChild(option);
+                option.addEventListener('click', () => {
+                    selectEpicOption(epic.id, option.textContent);
+                });
+                optionsList.appendChild(option);
             });
         } else {
-            epicSelect.innerHTML = '<option value="">No epics available</option>';
+            const noOption = document.createElement('div');
+            noOption.className = 'epic-option';
+            noOption.setAttribute('data-value', '');
+            noOption.textContent = 'No epics available';
+            noOption.style.cursor = 'default';
+            optionsList.appendChild(noOption);
         }
     }
 
@@ -1306,6 +1415,143 @@
         } else {
             sprintSelect.innerHTML = '<option value="">No sprints available</option>';
         }
+    }
+
+    // Auto-populate JIRA Component based on selected Initiative
+    function autoPopulateJiraComponent(initiativeId) {
+        const jiraComponentField = document.getElementById('jira-component');
+        
+        if (!initiativeId || !jiraComponentField) {
+            return;
+        }
+        
+        // Find the initiative in stored data
+        const selectedInitiative = currentState.allInitiatives.find(
+            init => init.id === initiativeId
+        );
+        
+        if (selectedInitiative && selectedInitiative.jiraComponent) {
+            // Match and select the component
+            jiraComponentField.value = selectedInitiative.jiraComponent;
+            console.log(`Auto-selected JIRA Component: ${selectedInitiative.jiraComponent}`);
+        } else {
+            // No match found, reset to default
+            jiraComponentField.value = '';
+            console.log('No JIRA Component found for selected initiative');
+        }
+    }
+
+    // Setup Searchable Epic Dropdown
+    function setupSearchableEpicDropdown() {
+        const header = document.getElementById('epic-dropdown-header');
+        const content = document.getElementById('epic-dropdown-content');
+        const searchInput = document.getElementById('epic-search-input');
+        const optionsList = document.getElementById('epic-options-list');
+        const hiddenInput = document.getElementById('epic');
+        const selectedText = document.getElementById('epic-selected-text');
+
+        if (!header || !content || !searchInput || !optionsList || !hiddenInput) {
+            console.warn('Epic dropdown elements not found');
+            return;
+        }
+
+        // Toggle dropdown
+        header.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isActive = content.style.display === 'block';
+            
+            if (isActive) {
+                closeEpicDropdown();
+            } else {
+                openEpicDropdown();
+            }
+        });
+
+        // Search functionality
+        searchInput.addEventListener('input', () => {
+            filterEpicOptions(searchInput.value);
+        });
+
+        // Prevent dropdown close when clicking inside search input
+        searchInput.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!header.contains(e.target) && !content.contains(e.target)) {
+                closeEpicDropdown();
+            }
+        });
+    }
+
+    function openEpicDropdown() {
+        const header = document.getElementById('epic-dropdown-header');
+        const content = document.getElementById('epic-dropdown-content');
+        const searchInput = document.getElementById('epic-search-input');
+        
+        if (content && header && searchInput) {
+            content.style.display = 'block';
+            header.classList.add('active');
+            searchInput.value = '';
+            searchInput.focus();
+            filterEpicOptions(''); // Show all options
+        }
+    }
+
+    function closeEpicDropdown() {
+        const header = document.getElementById('epic-dropdown-header');
+        const content = document.getElementById('epic-dropdown-content');
+        
+        if (content && header) {
+            content.style.display = 'none';
+            header.classList.remove('active');
+        }
+    }
+
+    function filterEpicOptions(searchTerm) {
+        const optionsList = document.getElementById('epic-options-list');
+        
+        if (!optionsList) return;
+
+        const options = optionsList.querySelectorAll('.epic-option');
+        const lowerSearch = searchTerm.toLowerCase();
+
+        options.forEach(option => {
+            const text = option.textContent.toLowerCase();
+            const matches = text.includes(lowerSearch);
+            
+            if (matches) {
+                option.classList.remove('hidden');
+            } else {
+                option.classList.add('hidden');
+            }
+        });
+    }
+
+    function selectEpicOption(value, text) {
+        const hiddenInput = document.getElementById('epic');
+        const selectedText = document.getElementById('epic-selected-text');
+        
+        if (hiddenInput) {
+            hiddenInput.value = value;
+        }
+        
+        if (selectedText) {
+            selectedText.textContent = text || 'Select Epic...';
+        }
+        
+        // Mark the selected option
+        const options = document.querySelectorAll('.epic-option');
+        options.forEach(opt => {
+            if (opt.getAttribute('data-value') === value) {
+                opt.classList.add('selected');
+            } else {
+                opt.classList.remove('selected');
+            }
+        });
+        
+        closeEpicDropdown();
     }
 
 
@@ -1429,7 +1675,7 @@
             return;
         }
         
-        // Set Tickets List as active by default
+        // Set WIP Tickets as active by default
         const wipBtn = document.getElementById('retrieve-wip-btn');
         const runningBtn = document.getElementById('running-tasks-btn');
         
@@ -1437,18 +1683,18 @@
             // Remove active from both buttons first
             wipBtn.classList.remove('active');
             runningBtn.classList.remove('active');
-            // Set running as active
-            runningBtn.classList.add('active');
+            // Set WIP as active
+            wipBtn.classList.add('active');
         }
         
         // Update the title
         const taskListTitle = document.getElementById('task-list-title');
         if (taskListTitle) {
-            taskListTitle.textContent = 'Tickets List';
+            taskListTitle.textContent = 'WIP Tickets';
         }
         
-        // Load the running tasks
-        loadRunningTasks();
+        // Load the WIP tasks
+        loadWipTasks();
     }
 
     function configureUserForFeatures() {
@@ -1569,6 +1815,12 @@
         const description = task.Description__c || 'No description available';
         const truncatedDescription = description.length > 100 ? description.substring(0, 100) + '...' : description;
         
+        // Build DevSecOps Hub link for the task title
+        const devsecopsHubUrl = `https://ciscolearningservices--clnuat4.sandbox.lightning.force.com/lightning/r/Feedback__c/${task.Id}/view`;
+        
+        // Build JIRA link for the ticket number
+        const jiraUrl = task.Jira_Link__c || '#';
+        
         // Show different action buttons based on task type
         let actionButtonsHTML = '';
         if (taskType === 'wip') {
@@ -1607,8 +1859,8 @@
             <div class="task-item" data-task-id="${task.Id}">
                 <div class="task-main-content">
                     <div class="task-header">
-                        <h4 class="task-name">${task.Name}</h4>
-                        <span class="task-ticket">${ticketNumber}</span>
+                        <h4 class="task-name"><a href="${devsecopsHubUrl}" class="task-title-link" title="Open in DevSecOps Hub">${task.Name}</a></h4>
+                        <span class="task-ticket"><a href="${jiraUrl}" class="task-jira-link" title="Open in JIRA">${ticketNumber}</a></span>
                     </div>
                     <p class="task-description">${truncatedDescription}</p>
                     <div class="task-meta">
@@ -1624,6 +1876,10 @@
 
     function extractTicketNumber(jiraLink) {
         if (!jiraLink) return 'N/A';
+        
+        // If the link is exactly 'TBD', return 'TBD'
+        if (jiraLink === 'TBD') return 'TBD';
+        
         // Future-proof pattern supporting GAI-572, DEVSECOPS-12208, ABC123-999, etc.
         const match = jiraLink.match(/\/browse\/([A-Z0-9]+-\d+)/i);
         return match ? match[1] : 'N/A';
@@ -1708,6 +1964,38 @@
                             console.warn('No task data attribute found for view button');
                         }
                         break;
+                }
+            });
+        });
+        
+        // Add event listeners for title and JIRA ticket links
+        const titleLinks = document.querySelectorAll('.task-title-link');
+        const jiraLinks = document.querySelectorAll('.task-jira-link');
+        
+        titleLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = link.getAttribute('href');
+                if (url && url !== '#') {
+                    vscode.postMessage({ 
+                        command: 'openExternalLink', 
+                        url: url 
+                    });
+                }
+            });
+        });
+        
+        jiraLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = link.getAttribute('href');
+                if (url && url !== '#') {
+                    vscode.postMessage({ 
+                        command: 'openExternalLink', 
+                        url: url 
+                    });
                 }
             });
         });
@@ -1847,6 +2135,22 @@
             case 'duplicateTaskMasterCheck':
                 console.log('Duplicate check result:', message.data);
                 handleDuplicateCheckResult(message.data);
+                break;
+            
+            case 'quickFeedbackResult':
+                console.log('Quick feedback result received:', message.data);
+                showQuickFeedbackResult(message.data);
+                if (message.data.success) {
+                    // Clear form and reload list on success
+                    clearQuickFeedbackForm();
+                    loadQuickFeedbackList();
+                }
+                break;
+            
+            case 'quickFeedbackListLoaded':
+                console.log('[Quick Feedback] Quick feedback list loaded message received:', message.data);
+                console.log('[Quick Feedback] Feedbacks count:', message.data?.feedbacks?.length);
+                displayQuickFeedbackList(message.data.feedbacks, message.data.pagination);
                 break;
         }
     });
@@ -2234,6 +2538,7 @@ Do you want to submit it again?`);
             'view-task-type': taskData.Type__c || 'Unknown',
             'view-task-priority': taskData.Jira_Priority__c || 'Not specified',
             'view-work-type': taskData.Work_Type__c || 'Not specified',
+            'view-jira-component': taskData.Jira_Component__c || 'Not specified',
             'view-jira-sprint': sprintName,
             'view-estimated-hours': taskData.Estimated_Effort_Hours__c ? `${taskData.Estimated_Effort_Hours__c} hours` : 'Not specified',
             'view-actual-hours': taskData.Actual_Effort_Hours__c ? `${taskData.Actual_Effort_Hours__c} hours` : 'Not specified',
@@ -2629,6 +2934,15 @@ Do you want to submit it again?`);
                 initiativeField.value = data.recommendedInitiativeId;
                 initiativeField.dispatchEvent(new Event('change'));
                 console.log(`Auto-selected initiative: ${data.recommendedInitiativeName}`);
+                
+                // Auto-populate JIRA Component if available
+                if (data.jiraComponent) {
+                    const jiraComponentField = document.getElementById('jira-component');
+                    if (jiraComponentField) {
+                        jiraComponentField.value = data.jiraComponent;
+                        console.log(`Auto-selected JIRA Component: ${data.jiraComponent}`);
+                    }
+                }
             }
         }
         
@@ -2657,6 +2971,465 @@ Do you want to submit it again?`);
             autoPopulateBadge.style.color = '#4caf50';
             autoPopulateBadge.style.fontSize = '12px';
             autoPopulateBadge.style.marginLeft = '8px';
+        }
+    }
+
+    // Quick Feedback Functions
+    
+    // Helper function to add business days (excluding weekends)
+    function addBusinessDays(date, days) {
+        const result = new Date(date);
+        let addedDays = 0;
+        
+        while (addedDays < days) {
+            result.setDate(result.getDate() + 1);
+            // Skip weekends (0 = Sunday, 6 = Saturday)
+            if (result.getDay() !== 0 && result.getDay() !== 6) {
+                addedDays++;
+            }
+        }
+        
+        return result;
+    }
+    
+    function setupQuickFeedbackEventListeners() {
+        // Accordion toggle
+        const accordionHeader = document.getElementById('quick-feedback-accordion-header');
+        const accordionContent = document.getElementById('quick-feedback-accordion-content');
+        const accordionArrow = accordionHeader?.querySelector('.accordion-arrow');
+        
+        accordionHeader?.addEventListener('click', () => {
+            const isExpanded = accordionContent?.classList.contains('expanded');
+            if (isExpanded) {
+                accordionContent?.classList.remove('expanded');
+                if (accordionArrow) accordionArrow.textContent = '▶';
+            } else {
+                accordionContent?.classList.add('expanded');
+                if (accordionArrow) accordionArrow.textContent = '▼';
+            }
+        });
+        
+        // Set default estimation date (current date + 10 business days, excluding weekends)
+        const estimationDateDisplay = document.getElementById('quick-estimation-date-display');
+        if (estimationDateDisplay) {
+            const defaultDate = addBusinessDays(new Date(), 10);
+            estimationDateDisplay.textContent = defaultDate.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'short', 
+                day: 'numeric' 
+            });
+        }
+        
+        // Submit button
+        const submitBtn = document.getElementById('submit-quick-feedback-btn');
+        submitBtn?.addEventListener('click', submitQuickFeedback);
+        
+        // Reset button
+        const resetBtn = document.getElementById('reset-quick-feedback-btn');
+        resetBtn?.addEventListener('click', clearQuickFeedbackForm);
+        
+        // Search functionality
+        const searchBtn = document.getElementById('quick-feedback-search-btn');
+        const searchInput = document.getElementById('quick-feedback-search-input');
+        const clearSearchBtn = document.getElementById('quick-feedback-clear-search-btn');
+        
+        searchBtn?.addEventListener('click', () => {
+            const searchTerm = searchInput?.value.trim();
+            if (searchTerm) {
+                loadQuickFeedbackList(0, searchTerm);
+            } else {
+                loadQuickFeedbackList();
+            }
+        });
+        
+        clearSearchBtn?.addEventListener('click', () => {
+            if (searchInput) searchInput.value = '';
+            clearSearchBtn.style.display = 'none';
+            loadQuickFeedbackList();
+        });
+        
+        searchInput?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchBtn?.click();
+            }
+        });
+        
+        searchInput?.addEventListener('input', () => {
+            const hasValue = searchInput.value.trim().length > 0;
+            if (clearSearchBtn) {
+                clearSearchBtn.style.display = hasValue ? 'inline-block' : 'none';
+            }
+        });
+        
+        // Pagination
+        const prevBtn = document.getElementById('quick-feedback-prev-page-btn');
+        const nextBtn = document.getElementById('quick-feedback-next-page-btn');
+        
+        prevBtn?.addEventListener('click', () => {
+            if (currentState.quickFeedbackPagination && currentState.quickFeedbackPagination.currentOffset > 0) {
+                const newOffset = Math.max(0, currentState.quickFeedbackPagination.currentOffset - currentState.quickFeedbackPagination.currentLimit);
+                loadQuickFeedbackList(newOffset, currentState.quickFeedbackPagination.searchTerm);
+            }
+        });
+        
+        nextBtn?.addEventListener('click', () => {
+            if (currentState.quickFeedbackPagination && currentState.quickFeedbackPagination.hasMore) {
+                const newOffset = currentState.quickFeedbackPagination.currentOffset + currentState.quickFeedbackPagination.currentLimit;
+                loadQuickFeedbackList(newOffset, currentState.quickFeedbackPagination.searchTerm);
+            }
+        });
+    }
+    
+    function submitQuickFeedback() {
+        // Check AWS connection
+        if (!canSubmitFeedback()) {
+            showQuickFeedbackResult({
+                success: false,
+                message: 'AWS connection is required to submit quick feedback. Please connect to AWS first.',
+                error: 'AWS connection required'
+            });
+            return;
+        }
+        
+        // Get form values
+        const title = document.getElementById('quick-feedback-title')?.value;
+        const description = document.getElementById('quick-feedback-description')?.value;
+        const acceptanceCriteria = document.getElementById('quick-feedback-acceptance')?.value;
+        
+        // Use hardcoded default configuration values (all fields are now read-only static text)
+        const deliveryLifecycle = 'Production';
+        const jiraType = 'Story';
+        const jiraPriority = 'Major-P3';
+        const workType = 'RTB';
+        
+        // Calculate estimation date (current date + 10 business days)
+        const estimationDate = addBusinessDays(new Date(), 10).toISOString().split('T')[0];
+        
+        // Validate required fields
+        if (!title || !description || !acceptanceCriteria) {
+            showQuickFeedbackResult({
+                success: false,
+                message: 'Please fill in all required fields (Title, Description, and Acceptance Criteria)',
+                error: 'Validation failed'
+            });
+            return;
+        }
+        
+        const feedbackData = {
+            title,
+            description,
+            acceptanceCriteria,
+            deliveryLifecycle,
+            jiraType,
+            jiraPriority,
+            workType,
+            estimationDate,
+            initiative: 'AI Security',
+            epic: 'DevSecOps Hub Feedback',
+            sddFeedback: true
+        };
+        
+        console.log('Submitting quick feedback:', feedbackData);
+        vscode.postMessage({ command: 'submitQuickFeedback', data: feedbackData });
+    }
+    
+    function clearQuickFeedbackForm() {
+        // Clear required fields
+        const titleField = document.getElementById('quick-feedback-title');
+        const descriptionField = document.getElementById('quick-feedback-description');
+        const acceptanceField = document.getElementById('quick-feedback-acceptance');
+        
+        if (titleField) titleField.value = '';
+        if (descriptionField) descriptionField.value = '';
+        if (acceptanceField) acceptanceField.value = '';
+        
+        // Note: Default configuration fields are now read-only static text (no reset needed)
+        
+        // Clear result message
+        const resultDiv = document.getElementById('quick-feedback-result');
+        if (resultDiv) {
+            resultDiv.style.display = 'none';
+            resultDiv.innerHTML = '';
+        }
+    }
+    
+    function showQuickFeedbackResult(result) {
+        console.log('showQuickFeedbackResult called with:', result);
+        const feedbackResult = document.getElementById('quick-feedback-result');
+        
+        if (!feedbackResult) {
+            console.error('Quick feedback result element not found!');
+            return;
+        }
+        
+        if (result.success) {
+            const displayTicketId = result.ticketId || 'N/A';
+            const isTBDTicket = result.isTBD === true || (result.jiraUrl === 'TBD' && result.ticketId === 'TBD');
+            
+            feedbackResult.className = 'feedback-result success';
+            feedbackResult.innerHTML = `
+                <div class="result-header">
+                    <span class="result-icon">✅</span>
+                    <span class="result-title">Quick Feedback Submitted Successfully</span>
+                </div>
+                <div class="result-details">
+                    <div class="result-item">
+                        <span class="result-label">Ticket ID:</span>
+                        <span class="result-value">${displayTicketId}</span>
+                    </div>
+                    <div class="result-item">
+                        <span class="result-label">Status:</span>
+                        <span class="result-value">${result.message}</span>
+                    </div>
+                    ${result.devsecopsHubUrl ? `
+                    <div class="result-item">
+                        <span class="result-label">DevSecOps Hub:</span>
+                        <span class="result-value"><a href="${result.devsecopsHubUrl}" target="_blank">View in Hub</a></span>
+                    </div>` : ''}
+                    ${isTBDTicket ? `
+                    <div class="result-item">
+                        <span>⚠️ Ticket is not created (TBD). Please delete this record from Quick Feedback list and create again.</span>
+                    </div>` : ''}
+                </div>
+            `;
+        } else {
+            feedbackResult.className = 'feedback-result error';
+            feedbackResult.innerHTML = `
+                <div class="result-header">
+                    <span class="result-icon">❌</span>
+                    <span class="result-title">Failed to Submit Quick Feedback</span>
+                </div>
+                <div class="result-details">
+                    <div class="result-item">
+                        <span class="result-label">Message:</span>
+                        <span class="result-value">${result.message}</span>
+                    </div>
+                    ${result.error ? `
+                    <div class="result-item">
+                        <span class="result-label">Error:</span>
+                        <span class="result-value error-text">${result.error}</span>
+                    </div>` : ''}
+                </div>
+            `;
+        }
+        
+        feedbackResult.style.display = 'block';
+        feedbackResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    function loadQuickFeedbackList(offset = 0, searchTerm = '') {
+        const loadingIndicator = document.getElementById('quick-feedback-loading');
+        const emptyState = document.getElementById('quick-feedback-empty-state');
+        const feedbackList = document.getElementById('quick-feedback-list');
+        
+        if (loadingIndicator) loadingIndicator.style.display = 'flex';
+        if (emptyState) emptyState.style.display = 'none';
+        if (feedbackList) feedbackList.style.display = 'none';
+        
+        const options = { 
+            limit: 10, 
+            offset: offset,
+            ...(searchTerm && { searchTerm })
+        };
+        
+        vscode.postMessage({ 
+            command: 'retrieveQuickFeedback',
+            data: options
+        });
+    }
+    
+    function displayQuickFeedbackList(feedbacks, pagination = null) {
+        console.log(`[Quick Feedback] displayQuickFeedbackList called with ${feedbacks.length} feedbacks:`, feedbacks);
+        
+        const loadingIndicator = document.getElementById('quick-feedback-loading');
+        const feedbackCount = document.getElementById('quick-feedback-count');
+        const emptyState = document.getElementById('quick-feedback-empty-state');
+        const feedbackList = document.getElementById('quick-feedback-list');
+        const paginationControls = document.getElementById('quick-feedback-pagination-controls');
+        
+        console.log('[Quick Feedback] DOM elements found:', { 
+            loadingIndicator: !!loadingIndicator, 
+            feedbackCount: !!feedbackCount, 
+            emptyState: !!emptyState, 
+            feedbackList: !!feedbackList,
+            paginationControls: !!paginationControls 
+        });
+        
+        if (loadingIndicator) loadingIndicator.style.display = 'none';
+        
+        // Store pagination state
+        currentState.quickFeedbackPagination = pagination;
+        
+        // Update count
+        if (feedbackCount) {
+            if (pagination && pagination.totalCount > 0) {
+                const startRecord = pagination.currentOffset + 1;
+                const endRecord = Math.min(pagination.currentOffset + feedbacks.length, pagination.totalCount);
+                feedbackCount.textContent = `${startRecord}-${endRecord} of ${pagination.totalCount} feedbacks`;
+            } else {
+                feedbackCount.textContent = `${feedbacks.length} feedback${feedbacks.length !== 1 ? 's' : ''}`;
+            }
+        }
+        
+        if (feedbacks.length === 0) {
+            // Show empty state
+            if (emptyState) {
+                const searchText = pagination?.searchTerm ? ` matching "${pagination.searchTerm}"` : '';
+                emptyState.innerHTML = `<p>No quick feedback found${searchText}.</p>`;
+                emptyState.style.display = 'block';
+            }
+            if (feedbackList) feedbackList.style.display = 'none';
+            if (paginationControls) paginationControls.style.display = 'none';
+            return;
+        }
+        
+        // Hide empty state and show list
+        if (emptyState) emptyState.style.display = 'none';
+        if (feedbackList) {
+            feedbackList.style.display = 'block';
+            feedbackList.innerHTML = feedbacks.map(feedback => createQuickFeedbackItemHTML(feedback)).join('');
+            
+            // Add event listeners for action buttons after a small delay to ensure DOM is ready
+            setTimeout(() => {
+                console.log('[Quick Feedback] Attaching event listeners to buttons');
+                addQuickFeedbackActionListeners();
+            }, 100);
+        }
+        
+        // Update pagination controls
+        if (pagination && paginationControls) {
+            updateQuickFeedbackPaginationControls(pagination);
+            paginationControls.style.display = 'flex';
+        } else if (paginationControls) {
+            paginationControls.style.display = 'none';
+        }
+    }
+    
+    function createQuickFeedbackItemHTML(feedback) {
+        const ticketNumber = extractTicketNumber(feedback.Jira_Link__c);
+        const description = feedback.Description__c || 'No description available';
+        const truncatedDescription = description.length > 100 ? description.substring(0, 100) + '...' : description;
+        
+        const devsecopsHubUrl = `https://ciscolearningservices--clnuat4.sandbox.lightning.force.com/lightning/r/Feedback__c/${feedback.Id}/view`;
+        const jiraUrl = feedback.Jira_Link__c || '#';
+        
+        return `
+            <div class="task-item" data-feedback-id="${feedback.Id}">
+                <div class="task-main-content">
+                    <div class="task-header">
+                        <h4 class="task-name"><a href="${devsecopsHubUrl}" class="task-title-link" title="Open in DevSecOps Hub">${feedback.Name}</a></h4>
+                        <span class="task-ticket"><a href="${jiraUrl}" class="task-jira-link" title="Open in JIRA">${ticketNumber}</a></span>
+                    </div>
+                    <p class="task-description">${truncatedDescription}</p>
+                    <div class="task-meta">
+                        <span class="task-status ${getStatusClass(feedback.Status__c)}">${feedback.Status__c || 'Unknown'}</span>
+                        <span class="task-type ${getTypeClass(feedback.Type__c)}">${feedback.Type__c || 'Unknown'}</span>
+                        ${feedback.Estimated_Effort_Hours__c ? `<span class="task-effort">${feedback.Estimated_Effort_Hours__c}h</span>` : ''}
+                    </div>
+                </div>
+                <div class="task-actions">
+                    <button class="task-action-btn delete" data-action="delete" data-feedback-id="${feedback.Id}" data-feedback-name="${feedback.Name}" data-ticket-number="${ticketNumber}">
+                        Delete
+                    </button>
+                    <button class="task-action-btn view" data-action="view" data-feedback-id="${feedback.Id}" data-feedback-data='${JSON.stringify(feedback).replace(/'/g, "&apos;")}'>
+                        View
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+    
+    function addQuickFeedbackActionListeners() {
+        const actionButtons = document.querySelectorAll('#quick-feedback-list .task-action-btn');
+        console.log('[Quick Feedback] Adding listeners to', actionButtons.length, 'buttons');
+        
+        actionButtons.forEach(button => {
+            button.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const action = button.getAttribute('data-action');
+                const feedbackId = button.getAttribute('data-feedback-id');
+                const feedbackName = button.getAttribute('data-feedback-name');
+                
+                console.log('[Quick Feedback] Button clicked:', action, feedbackId);
+                
+                switch (action) {
+                    case 'delete':
+                        const ticketNumber = button.getAttribute('data-ticket-number');
+                        console.log('[Quick Feedback] Sending delete command:', feedbackId);
+                        vscode.postMessage({ 
+                            command: 'deleteQuickFeedback', 
+                            data: { feedbackId, feedbackName, ticketNumber } 
+                        });
+                        break;
+                    case 'view':
+                        console.log('[Quick Feedback] Opening view modal');
+                        const feedbackDataAttr = button.getAttribute('data-feedback-data');
+                        if (feedbackDataAttr && feedbackDataAttr.trim() !== '') {
+                            try {
+                                const feedbackData = JSON.parse(feedbackDataAttr.replace(/&apos;/g, "'"));
+                                if (feedbackData && feedbackData.Id && feedbackData.Name) {
+                                    showTaskViewModal(feedbackData);
+                                } else {
+                                    console.warn('Invalid feedback data for view modal:', feedbackData);
+                                }
+                            } catch (error) {
+                                console.error('Error parsing feedback data:', error, feedbackDataAttr);
+                            }
+                        } else {
+                            console.warn('No feedback data attribute found for view button');
+                        }
+                        break;
+                }
+            });
+        });
+        
+        // Add event listeners for title and JIRA links
+        const titleLinks = document.querySelectorAll('#quick-feedback-list .task-title-link');
+        const jiraLinks = document.querySelectorAll('#quick-feedback-list .task-jira-link');
+        
+        titleLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = link.getAttribute('href');
+                if (url && url !== '#') {
+                    vscode.postMessage({ command: 'openExternalLink', url: url });
+                }
+            });
+        });
+        
+        jiraLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = link.getAttribute('href');
+                if (url && url !== '#') {
+                    vscode.postMessage({ command: 'openExternalLink', url: url });
+                }
+            });
+        });
+    }
+    
+    function updateQuickFeedbackPaginationControls(pagination) {
+        const prevBtn = document.getElementById('quick-feedback-prev-page-btn');
+        const nextBtn = document.getElementById('quick-feedback-next-page-btn');
+        const paginationInfo = document.getElementById('quick-feedback-pagination-info');
+
+        if (prevBtn) {
+            prevBtn.disabled = pagination.currentOffset === 0;
+        }
+
+        if (nextBtn) {
+            nextBtn.disabled = !pagination.hasMore;
+        }
+
+        if (paginationInfo) {
+            const currentPage = Math.floor(pagination.currentOffset / pagination.currentLimit) + 1;
+            const totalPages = Math.ceil(pagination.totalCount / pagination.currentLimit);
+            const searchText = pagination.searchTerm ? ` (filtered)` : '';
+            paginationInfo.textContent = `Page ${currentPage} of ${totalPages}${searchText}`;
         }
     }
 

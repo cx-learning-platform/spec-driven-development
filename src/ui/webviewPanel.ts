@@ -30,7 +30,7 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
 
         // Handle messages from the webview
         webviewView.webview.onDidReceiveMessage(
-            message => {
+            async message => {
                 switch (message.command) {
                     case 'connectAWS':
                         vscode.commands.executeCommand('specDrivenDevelopment.connectAWS');
@@ -134,6 +134,38 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                         } else {
                             vscode.commands.executeCommand('specDrivenDevelopment.retrieveRunningTasks', message.data);
                         }
+                        break;
+                    
+                    case 'openExternalLink':
+                        if (message.url) {
+                            vscode.env.openExternal(vscode.Uri.parse(message.url));
+                        }
+                        break;
+                    
+                    case 'showNotification':
+                        if (message.type === 'warning') {
+                            vscode.window.showWarningMessage(message.message);
+                        } else if (message.type === 'error') {
+                            vscode.window.showErrorMessage(message.message);
+                        } else {
+                            vscode.window.showInformationMessage(message.message);
+                        }
+                        break;
+                    
+                    case 'submitQuickFeedback':
+                        vscode.commands.executeCommand('specDrivenDevelopment.submitQuickFeedback', message.data);
+                        break;
+                    
+                    case 'retrieveQuickFeedback':
+                        vscode.commands.executeCommand('specDrivenDevelopment.retrieveQuickFeedback', message.data);
+                        break;
+                    
+                    case 'deleteQuickFeedback':
+                        vscode.commands.executeCommand('specDrivenDevelopment.deleteQuickFeedback', message.data);
+                        break;
+                    
+                    case 'searchQuickFeedback':
+                        vscode.commands.executeCommand('specDrivenDevelopment.searchQuickFeedback', message.data);
                         break;
                 }
             },
@@ -301,6 +333,27 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
             });
         }
     }
+    
+    public sendQuickFeedbackResult(result: any) {
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: 'quickFeedbackResult',
+                data: result
+            });
+        }
+    }
+    
+    public sendQuickFeedbackList(feedbacks: any[], pagination?: any) {
+        if (this._view) {
+            this._view.webview.postMessage({
+                command: 'quickFeedbackListLoaded',
+                data: {
+                    feedbacks,
+                    pagination
+                }
+            });
+        }
+    }
 
     private handleGetEstimationData() {
         // Get cached estimation data
@@ -395,52 +448,42 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                             <button class="tab-button active" data-tab="aws-config">Configurations</button>
                             <button class="tab-button" data-tab="feedback">Manage Features</button>
                             <button class="tab-button" data-tab="devsecops-hub">My Task List</button>
+                            <button class="tab-button" data-tab="quick-feedback">Quick Feedback</button>
                         </div>
                         
                         <!-- Configurations Tab -->
                         <div class="tab-content active" id="aws-config">
                             <div class="status-section">
                                 <div class="status-indicator" id="aws-status-indicator">
-                                    <span class="status-dot status-disconnected"></span>
-                                    <span class="status-text" id="aws-status-text">Not Connected</span>
+                                    <span class="status-dot"></span>
+                                    <span class="status-text" id="aws-status-text">Checking connection status...</span>
                                 </div>
                             </div>
                             
                             <div class="section">
-                                <h3>AWS CLI Integration</h3>
-                                <ul class="feature-list">
-                                    <li>• Uses your local AWS CLI credentials</li>
-                                    <li>• Automatic credential detection</li>
-                                    <li>• Secure connection to Secrets Manager</li>
-                                </ul>
+                                <h3>AWS Configuration</h3>
                                 
-                                <!-- Secret Validation Section - Always visible, matching Connection Details style -->
-                                <div class="secret-validation-section" id="secret-validation-section" style="margin-top: 15px;">
-                                    <h4>Secret Validation:</h4>
+                                <!-- Credential Validation -->
+                                <div class="secret-validation-section" id="secret-validation-section" style="margin-top: 15px; display: none;">
                                     <div class="connection-status-card" id="secret-validation-card">
                                         <div class="connection-header">
-                                            <span class="connection-icon" id="secret-validation-icon">🔍</span>
-                                            <span class="connection-title" id="secret-validation-title">Checking Secret...</span>
+                                            <span class="connection-icon" id="secret-validation-icon"></span>
+                                            <span class="connection-title" id="secret-validation-title">Not Connected</span>
                                         </div>
                                         <div class="connection-info" id="secret-validation-info">
                                             <div class="info-row">
-                                                <span class="info-label">Status:</span>
-                                                <span class="info-value" id="secret-status-value">Pending validation</span>
+                                                <span class="info-value" id="secret-status-value">Connect to validate credentials</span>
                                             </div>
-                                            <div class="info-row">
-                                                <span class="info-label">Missing Fields:</span>
-                                                <span class="info-value" id="secret-missing-fields">Checking...</span>
-                                            </div>
-                                            <div class="info-row" id="secret-details-row" style="display: none;">
-                                                <span class="info-label">Details:</span>
-                                                <span class="info-value" id="secret-details-value">-</span>
+                                            <div class="info-row" id="secret-missing-row" style="display: none;">
+                                                <span class="info-label">Missing:</span>
+                                                <span class="info-value" id="secret-missing-fields">N/A</span>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <div class="button-group">
-                                    <button class="primary-button" id="connect-aws-btn">
+                                <div class="button-group" id="aws-button-group" style="display: none;">
+                                    <button class="primary-button" id="connect-aws-btn" style="display: none;">
                                         🔌 Connect to AWS SM
                                     </button>
                                     <button class="secondary-button" id="refresh-aws-btn" style="display: none;">
@@ -451,8 +494,10 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                     </button>
                                 </div>
                                 
+                                <!-- Error/Status Messages -->
+                                <div class="feedback-result" id="aws-error-result"></div>
+                                
                                 <div class="connection-details" id="aws-connection-details" style="display: none;">
-                                    <h4>Connection Details:</h4>
                                     <div id="aws-details-content"></div>
                                 </div>
                                 
@@ -592,7 +637,7 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                         Submit Feature
                                     </button>
                                     <button class="secondary-button" id="load-data-btn">
-                                        Refresh Tab
+                                        Reset
                                     </button>
                                 </div>
                                 
@@ -791,104 +836,223 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- Task View Modal (Read-only) -->
-                                <div class="task-view-modal" id="task-view-modal" style="display: none;">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h3>View Task Details</h3>
-                                            <button class="close-btn" id="close-view-modal">×</button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <div class="view-group">
-                                                <label>Name:</label>
-                                                <div class="view-value" id="view-task-name"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>JIRA Ticket:</label>
-                                                <div class="view-value" id="view-jira-link"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Description:</label>
-                                                <div class="view-value" id="view-task-description"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Status:</label>
-                                                <div class="view-value" id="view-task-status"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Type:</label>
-                                                <div class="view-value" id="view-task-type"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Priority:</label>
-                                                <div class="view-value" id="view-task-priority"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Work Type:</label>
-                                                <div class="view-value" id="view-work-type"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>JIRA Component:</label>
-                                                <div class="view-value" id="view-jira-component"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>JIRA Sprint:</label>
-                                                <div class="view-value" id="view-jira-sprint"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Estimated Hours:</label>
-                                                <div class="view-value" id="view-estimated-hours"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Actual Hours:</label>
-                                                <div class="view-value" id="view-actual-hours"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Acceptance Criteria:</label>
-                                                <div class="view-value" id="view-acceptance-criteria"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Resolution:</label>
-                                                <div class="view-value" id="view-resolution"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Epic ID:</label>
-                                                <div class="view-value" id="view-epic-id"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>Deployment Date:</label>
-                                                <div class="view-value" id="view-deployment-date"></div>
-                                            </div>
-                                            
-                                            <div class="view-group">
-                                                <label>AI-Adopted:</label>
-                                                <div class="view-value" id="view-ai-adopted"></div>
-                                            </div>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button class="primary-button" id="close-view-btn">Close</button>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         
 
+                    </div>
+                    
+                    <!-- Quick Feedback Tab -->
+                    <div class="tab-content" id="quick-feedback">
+                        <div class="section">
+                            <h3>📝 Create Quick Feedback</h3>
+                            
+                            <!-- Default Configuration Accordion (Collapsed by default) -->
+                            <div class="accordion-section">
+                                <div class="accordion-header" id="quick-feedback-accordion-header">
+                                    <span class="accordion-arrow">▶</span>
+                                    <span>Default Configuration (Click to expand)</span>
+                                </div>
+                                <div class="accordion-content" id="quick-feedback-accordion-content">
+                                    <div class="config-row">
+                                        <span class="config-label">Delivery Lifecycle:</span>
+                                        <span class="config-value">Production</span>
+                                    </div>
+                                    <div class="config-row">
+                                        <span class="config-label">Jira Type:</span>
+                                        <span class="config-value">Story</span>
+                                    </div>
+                                    <div class="config-row">
+                                        <span class="config-label">Jira Priority:</span>
+                                        <span class="config-value">Major-P3</span>
+                                    </div>
+                                    <div class="config-row">
+                                        <span class="config-label">Work Type:</span>
+                                        <span class="config-value">RTB</span>
+                                    </div>
+                                    <div class="config-row">
+                                        <span class="config-label">Initiative:</span>
+                                        <span class="config-value">AI Security</span>
+                                    </div>
+                                    <div class="config-row">
+                                        <span class="config-label">Epic:</span>
+                                        <span class="config-value">DevSecOps Hub Feedback</span>
+                                    </div>
+                                    <div class="config-row">
+                                        <span class="config-label">Estimation Date:</span>
+                                        <span class="config-value" id="quick-estimation-date-display"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Quick Feedback Form (Only 3 required fields visible) -->
+                            <div class="input-group">
+                                <label for="quick-feedback-title">Title: <span class="required">*</span></label>
+                                <input type="text" id="quick-feedback-title" placeholder="e.g. Fix login issue" required />
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="quick-feedback-description">Description: <span class="required">*</span></label>
+                                <textarea id="quick-feedback-description" rows="4" placeholder="Describe the issue or feature..." required></textarea>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label for="quick-feedback-acceptance">Acceptance Criteria: <span class="required">*</span></label>
+                                <textarea id="quick-feedback-acceptance" rows="3" placeholder="Define what success looks like..." required></textarea>
+                            </div>
+                            
+                            <div class="button-group">
+                                <button class="primary-button" id="submit-quick-feedback-btn">
+                                    Submit Feedback
+                                </button>
+                                <button class="secondary-button" id="reset-quick-feedback-btn">
+                                    Reset
+                                </button>
+                            </div>
+                            
+                            <div class="feedback-result" id="quick-feedback-result"></div>
+                        </div>
+                        
+                        <!-- My Quick Feedback List -->
+                        <div class="section" style="margin-top: 20px;">
+                            <h3>My Feedback</h3>
+                            
+                            <!-- Search Bar -->
+                            <div class="search-container" id="quick-feedback-search-container">
+                                <div class="input-group">
+                                    <input type="text" id="quick-feedback-search-input" placeholder="Search by ticket ID, name, or description..." />
+                                    <button class="secondary-button" id="quick-feedback-search-btn">Search</button>
+                                    <button class="secondary-button" id="quick-feedback-clear-search-btn" style="display: none;">Clear</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Quick Feedback List Container -->
+                            <div class="task-list-container" id="quick-feedback-list-container">
+                                <div class="task-list-header">
+                                    <h4 id="quick-feedback-list-title">Feedback List</h4>
+                                    <div class="task-count" id="quick-feedback-count">0 feedbacks</div>
+                                </div>
+                                
+                                <div class="task-list-content" id="quick-feedback-list-content">
+                                    <div class="loading-indicator" id="quick-feedback-loading" style="display: none;">
+                                        <div class="loading-spinner"></div>
+                                        <span>Loading quick feedback...</span>
+                                    </div>
+                                    
+                                    <div class="empty-state" id="quick-feedback-empty-state">
+                                        <p>No quick feedback found. Create your first one above!</p>
+                                    </div>
+                                    
+                                    <div class="task-list" id="quick-feedback-list" style="display: none;">
+                                        <!-- Quick feedback items will be populated here -->
+                                    </div>
+                                    
+                                    <!-- Pagination Controls -->
+                                    <div class="pagination-controls" id="quick-feedback-pagination-controls" style="display: none;">
+                                        <button class="secondary-button" id="quick-feedback-prev-page-btn" disabled>← Previous</button>
+                                        <span class="pagination-info" id="quick-feedback-pagination-info">Page 1 of 1</span>
+                                        <button class="secondary-button" id="quick-feedback-next-page-btn" disabled>Next →</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- End of tabs -->
+                    </div>
+                    
+                    <!-- Global Modal - Task View Modal (Read-only) - Shared by My Task List and Quick Feedback -->
+                    <div class="task-view-modal" id="task-view-modal" style="display: none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>View Task Details</h3>
+                                <button class="close-btn" id="close-view-modal">×</button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="view-group">
+                                    <label>Name:</label>
+                                    <div class="view-value" id="view-task-name"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>JIRA Ticket:</label>
+                                    <div class="view-value" id="view-jira-link"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Description:</label>
+                                    <div class="view-value" id="view-task-description"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Status:</label>
+                                    <div class="view-value" id="view-task-status"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Type:</label>
+                                    <div class="view-value" id="view-task-type"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Priority:</label>
+                                    <div class="view-value" id="view-task-priority"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Work Type:</label>
+                                    <div class="view-value" id="view-work-type"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>JIRA Component:</label>
+                                    <div class="view-value" id="view-jira-component"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>JIRA Sprint:</label>
+                                    <div class="view-value" id="view-jira-sprint"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Estimated Hours:</label>
+                                    <div class="view-value" id="view-estimated-hours"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Actual Hours:</label>
+                                    <div class="view-value" id="view-actual-hours"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Acceptance Criteria:</label>
+                                    <div class="view-value" id="view-acceptance-criteria"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Resolution:</label>
+                                    <div class="view-value" id="view-resolution"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Epic ID:</label>
+                                    <div class="view-value" id="view-epic-id"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>Deployment Date:</label>
+                                    <div class="view-value" id="view-deployment-date"></div>
+                                </div>
+                                
+                                <div class="view-group">
+                                    <label>AI-Adopted:</label>
+                                    <div class="view-value" id="view-ai-adopted"></div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="primary-button" id="close-view-btn">Close</button>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- Estimation Notification Popup - REMOVED per user request -->

@@ -187,8 +187,8 @@ export class TaskService {
             const limit = options.limit || 20;
             const offset = options.offset || 0;
 
-            // Build the WHERE clause with WIP conditions, user filter (email OR assignee), and optional search
-            let whereClause = `WHERE Jira_Link__c != null AND Status__c != 'Done' AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
+            // Build the WHERE clause with WIP conditions, user filter (email OR assignee), exclude Quick Feedback, and optional search
+            let whereClause = `WHERE Jira_Link__c != null AND Status__c != 'Done' AND (SDD_Feedback__c = false OR SDD_Feedback__c = null) AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
             
             if (options.searchTerm) {
                 const searchTerm = options.searchTerm.trim().replace(/'/g, "\\'");
@@ -199,8 +199,8 @@ export class TaskService {
                     // Search specifically in Jira_Link__c for the ticket ID
                     whereClause += ` AND Jira_Link__c LIKE '%${searchTerm}%'`;
                 } else {
-                    // General search across multiple fields
-                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Description__c LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
+                    // General search across multiple fields (Description__c excluded as it cannot be filtered in SOQL)
+                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
                 }
             }
 
@@ -283,8 +283,8 @@ export class TaskService {
             const limit = options.limit || 20;
             const offset = options.offset || 0;
 
-            // Build the WHERE clause with user filter (email OR assignee) and optional search
-            let whereClause = `WHERE (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
+            // Build the WHERE clause with user filter (email OR assignee), exclude Quick Feedback, and optional search
+            let whereClause = `WHERE (SDD_Feedback__c = false OR SDD_Feedback__c = null) AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
             
             if (options.searchTerm) {
                 const searchTerm = options.searchTerm.trim().replace(/'/g, "\\'");
@@ -295,8 +295,8 @@ export class TaskService {
                     // Search specifically in Jira_Link__c for the ticket ID
                     whereClause += ` AND Jira_Link__c LIKE '%${searchTerm}%'`;
                 } else {
-                    // General search across multiple fields
-                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Description__c LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
+                    // General search across multiple fields (Description__c excluded as it cannot be filtered in SOQL)
+                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
                 }
             }
 
@@ -378,8 +378,8 @@ export class TaskService {
             const limit = options.limit || 20;
             const offset = options.offset || 0;
 
-            // Build the WHERE clause for Done tickets with user filter (email OR assignee)
-            let whereClause = `WHERE Status__c = 'Done' AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
+            // Build the WHERE clause for Done tickets with user filter (email OR assignee) and exclude Quick Feedback
+            let whereClause = `WHERE Status__c = 'Done' AND (SDD_Feedback__c = false OR SDD_Feedback__c = null) AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
             
             if (options.searchTerm) {
                 const searchTerm = options.searchTerm.trim().replace(/'/g, "\\'");
@@ -390,8 +390,8 @@ export class TaskService {
                     // Search specifically in Jira_Link__c for the ticket ID
                     whereClause += ` AND Jira_Link__c LIKE '%${searchTerm}%'`;
                 } else {
-                    // General search across multiple fields
-                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Description__c LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
+                    // General search across multiple fields (Description__c excluded as it cannot be filtered in SOQL)
+                    whereClause += ` AND (Name LIKE '%${searchTerm}%' OR Jira_Link__c LIKE '%${searchTerm}%')`;
                 }
             }
 

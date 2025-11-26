@@ -274,13 +274,61 @@
 .primary-button, .secondary-button {
     padding: 8px 16px;
     border: none;
-    border-radius: 2px;
+    border-radius: 3px;
     cursor: pointer;
     font-family: inherit;
     font-size: 11px;
-    transition: background-color 0.2s ease;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
 
+/* AWS Configuration buttons - match task action button size */
+#aws-button-group {
+    gap: 10px;
+}
+
+#aws-button-group .primary-button,
+#aws-button-group .secondary-button,
+#aws-button-group .danger-button {
+    padding: 4px 8px;
+    font-size: 10px;
+    font-weight: 500;
+    min-width: 50px;
+}
+
+#aws-button-group .primary-button {
+    background-color: rgba(0, 188, 235, 0.2);
+    color: #ffffff;
+    border: 1px solid rgba(0, 188, 235, 0.3);
+}
+
+#aws-button-group .primary-button:hover:not(:disabled) {
+    background-color: rgba(0, 188, 235, 0.3);
+}
+
+#aws-button-group .secondary-button {
+    background-color: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+    border: 1px solid rgba(34, 197, 94, 0.3);
+    margin-left: 2px;
+}
+
+#aws-button-group .secondary-button:hover {
+    background-color: rgba(34, 197, 94, 0.3);
+}
+
+#aws-button-group .danger-button {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    margin-left: 4px;
+}
+
+#aws-button-group .danger-button:hover {
+    background-color: rgba(239, 68, 68, 0.3);
+}
+
+/* Default button styles for other areas */
 .primary-button {
     background-color: var(--cisco-blue);
     color: white;
@@ -492,6 +540,20 @@
 
 .connection-info {
     padding: 15px;
+}
+
+/* Validation box styling - left aligned white text */
+#secret-validation-card .connection-info {
+    text-align: left;
+}
+
+#secret-validation-card .info-row {
+    justify-content: flex-start;
+}
+
+#secret-validation-card .info-value {
+    color: #ffffff;
+    text-align: left;
 }
 
 .info-row {
@@ -965,6 +1027,17 @@
     margin: 0;
 }
 
+.task-title-link {
+    color: var(--vscode-textLink-foreground);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.task-title-link:hover {
+    text-decoration: underline;
+    color: var(--vscode-textLink-activeForeground);
+}
+
 .task-ticket {
     font-size: 11px;
     color: var(--vscode-textLink-foreground);
@@ -972,6 +1045,16 @@
     padding: 2px 6px;
     border-radius: 3px;
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.task-jira-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.task-jira-link:hover {
+    text-decoration: underline;
 }
 
 .task-description {
@@ -1236,6 +1319,103 @@
     margin-bottom: 15px;
 }
 
+/* Searchable Dropdown for Epic */
+.searchable-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.searchable-dropdown-header {
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-input-foreground);
+    padding: 6px 8px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 2px;
+    font-size: 11px;
+    box-sizing: border-box;
+}
+
+.searchable-dropdown-header:hover {
+    border-color: var(--vscode-focusBorder);
+}
+
+.searchable-dropdown-header.active {
+    border-color: var(--vscode-focusBorder);
+}
+
+.dropdown-arrow {
+    color: var(--vscode-input-foreground);
+    font-size: 9px;
+    transition: transform 0.2s;
+    opacity: 0.7;
+}
+
+.searchable-dropdown-header.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.searchable-dropdown-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--vscode-dropdown-background);
+    border: 1px solid var(--vscode-input-border);
+    border-top: none;
+    max-height: 200px;
+    overflow: hidden;
+    z-index: 1000;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    margin-top: 1px;
+}
+
+.epic-search-input {
+    width: calc(100% - 16px);
+    padding: 6px 8px;
+    margin: 6px 8px 4px 8px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    color: var(--vscode-input-foreground);
+    outline: none;
+    border-radius: 2px;
+    font-size: 13px;
+}
+
+.epic-search-input:focus {
+    border-color: var(--vscode-focusBorder);
+}
+
+.epic-options-list {
+    max-height: 140px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+.epic-option {
+    padding: 6px 12px;
+    cursor: pointer;
+    color: var(--vscode-dropdown-foreground);
+    background: var(--vscode-dropdown-background);
+    font-size: 13px;
+}
+
+.epic-option:hover {
+    background: var(--vscode-list-hoverBackground);
+}
+
+.epic-option.selected {
+    background: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.epic-option.hidden {
+    display: none;
+}
+
 /* Task View Modal (shares base modal styles) */
 .task-view-modal {
     position: fixed;
@@ -1432,4 +1612,87 @@
 
 .toggle-switch input:checked + .toggle-slider:hover {
     background-color: #059669;
+}
+
+/* Accordion Styles for Quick Feedback */
+.accordion-section {
+    margin-bottom: 20px;
+}
+
+.accordion-header {
+    cursor: pointer;
+    padding: 12px;
+    background-color: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s ease;
+    user-select: none;
+}
+
+.accordion-header:hover {
+    background-color: var(--vscode-list-hoverBackground);
+}
+
+.accordion-arrow {
+    font-size: 12px;
+    transition: transform 0.3s ease;
+    display: inline-block;
+}
+
+.accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    background-color: var(--vscode-textCodeBlock-background);
+}
+
+.accordion-content.expanded {
+    max-height: 600px;
+    padding: 15px;
+    border: 1px solid var(--vscode-input-border);
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+}
+
+.config-row {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.config-row:last-child {
+    margin-bottom: 0;
+}
+
+.config-label {
+    font-weight: 500;
+    color: var(--vscode-foreground);
+    font-size: 12px;
+}
+
+.config-value {
+    color: var(--vscode-descriptionForeground);
+    font-size: 12px;
+}
+
+.config-input {
+    width: 100%;
+    padding: 6px 8px;
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 2px;
+    font-family: inherit;
+    font-size: 11px;
+    box-sizing: border-box;
+}
+
+.config-input:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    outline-offset: -1px;
 }
