@@ -50,6 +50,22 @@ export const CONFIG = {
         ticketIdPattern: /^[A-Z0-9]+-\d+$/i
     },
     
+    quickFeedback: {
+        // Hardcoded IDs for Quick Feedback feature (AI Security initiative and DevSecOps Hub Feedback epic)
+        // These are used as defaults to avoid API lookups on every submission
+        // If these IDs fail, the system will automatically fetch and cache the correct IDs
+        defaults: {
+            initiativeId: 'a3T01000000DEJcEAO',  // AI Security initiative
+            initiativeName: 'AI Security',
+            epicId: 'a5FD2000000E2vcMAC',        // DevSecOps Hub Feedback epic
+            epicName: 'DevSecOps Hub Feedback'
+        },
+        // Cache settings for ID lookups (when hardcoded IDs fail)
+        cache: {
+            ttl: 24 * 60 * 60 * 1000  // 24 hours in milliseconds
+        }
+    },
+    
     termsAndConditions: {
         // Periodic display intervals (in milliseconds)
         periodicIntervals: {

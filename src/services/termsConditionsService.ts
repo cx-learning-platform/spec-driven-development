@@ -97,7 +97,7 @@ export class TermsConditionsService {
             'Terms & Conditions',
             {
                 modal: true,
-                detail: 'By using this extension, you acknowledge that certain metadata will be securely shared with the DevSecOps Hub to enable feature tracking, work management, and analytics.\n\nInformation Collected:\n\n• Repository Metadata: Repository name, branch information, and Git commit details used for automatic feature association and tracking.\n\n• Work Item Data: Feature descriptions, estimations, task details, and work types submitted through the extension to create and manage JIRA tickets in Salesforce.\n\n• Bill of Materials: Automatically detected configuration files and tooling artifacts for compliance validation.\n\n• User Information: Your name and email (from Git configuration) to associate work items with the correct team member.\n\n• Consent Status: Your acceptance or revocation of these terms.\n\nAll data is transmitted securely to Salesforce and handled in accordance with organizational security policies. This data is used exclusively for work tracking, compliance reporting, and improving the developer experience.\n\nDo you accept these Terms & Conditions and consent to the collection of metadata described above?'
+                detail: 'By using this extension, you acknowledge that certain metadata will be securely shared with the DevSecOps Hub to enable feature tracking, work management, and analytics.\n\nInformation Collected:\n\n• Repository Metadata: Repository name, branch information, and Git commit details used for automatic feature association and tracking.\n\n• Work Item Data: Feature descriptions, estimations, task details, and work types submitted through the extension to create and manage JIRA tickets in the Hub.\n\n• Bill of Materials: Automatically detected configuration files and tooling artifacts for compliance validation.\n\n• User Information: Your name and email (from Git configuration) to associate work items with the correct team member.\n\n• Consent Status: Your acceptance or revocation of these terms.\n\nAll data is transmitted securely to the Hub and handled in accordance with organizational security policies. This data is used exclusively for work tracking, compliance reporting, and improving the developer experience.\n\nDo you accept these Terms & Conditions and consent to the collection of metadata described above?'
             },
             'Agree',
             'Disagree'
@@ -199,7 +199,7 @@ export class TermsConditionsService {
         } catch (error) {
             console.error('[SDD:T&C] ERROR | Failed to process user consent:', error);
             vscode.window.showErrorMessage(
-                `Failed to send data to Salesforce: ${error instanceof Error ? error.message : 'Unknown error'}`
+                `Failed to send data to Hub: ${error instanceof Error ? error.message : 'Unknown error'}`
             );
             throw error;
         }
@@ -426,22 +426,22 @@ export class TermsConditionsService {
 
             if (!response.ok) {
                 const errorText = await response.text();
-                throw new Error(`Failed to send User Details to Salesforce: ${response.status} ${response.statusText}. ${errorText}`);
+                throw new Error(`Failed to send User Details to Hub: ${response.status} ${response.statusText}. ${errorText}`);
             }
 
             const result = await response.json();
             
             if (!result.success) {
-                console.error('[SDD:T&C] ERROR | Salesforce returned errors:', result.errors);
-                throw new Error(`Salesforce API errors: ${JSON.stringify(result.errors)}`);
+                console.error('[SDD:T&C] ERROR | Hub returned errors:', result.errors);
+                throw new Error(`Hub API errors: ${JSON.stringify(result.errors)}`);
             }
 
-            console.log('[SDD:T&C] INFO | User Details sent successfully to Salesforce Hub. Record ID:', result.id);
+            console.log('[SDD:T&C] INFO | User Details sent successfully to Hub. Record ID:', result.id);
             
             return billOfMaterialsArray;
 
         } catch (error) {
-            console.error('[SDD:T&C] ERROR | Failed to send User Details to Salesforce:', error);
+            console.error('[SDD:T&C] ERROR | Failed to send User Details to Hub:', error);
             throw error;
         }
     }

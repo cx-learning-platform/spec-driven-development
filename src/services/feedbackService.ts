@@ -42,6 +42,20 @@ export interface FeedbackData {
     sprintId?: string; // Jira Sprint Details field
 }
 
+export interface QuickFeedbackData {
+    title: string;
+    description: string;
+    acceptanceCriteria: string;
+    deliveryLifecycle: string;
+    jiraType: 'Story' | 'Bug' | 'Defect';
+    jiraPriority: string;
+    workType: string;
+    estimationDate: string;
+    initiative: string; // Always "AI Security"
+    epic: string; // Always "DevSecOps Hub Feedback"
+    sddFeedback: boolean; // Always true for Quick Feedback
+}
+
 export interface SalesforceInitiative {
     id: string;
     name: string;
@@ -75,8 +89,11 @@ export interface FeedbackSubmissionResult {
     message: string;
     ticketId?: string;
     jiraUrl?: string;
+    feedbackId?: string;
+    devsecopsHubUrl?: string;
     timestamp: string;
     error?: string;
+    isTBD?: boolean;
 }
 
 export class FeedbackService {
@@ -609,17 +626,22 @@ export class FeedbackService {
             console.log('[SDD:Feedback] INFO | Salesforce response:', { status: response.status, result });
 
             if (response.ok && result.success) {
-                let jiraTicketNumber = result.id; // Fallback to Salesforce ID
+                const feedbackId = result.id;
+                let jiraTicketNumber = feedbackId; // Fallback to Salesforce ID
+                let isTBD = false; // Track if JIRA link is TBD
 
-                let jiraUrl = undefined;
+                let jiraUrl: string | undefined;
                 
                 try {
                     // Retry logic to wait for JIRA ticket creation (as it's asynchronous)
-                    const maxRetries = 3;
-                    const retryDelay = 2000; // 2 seconds
+                    const maxRetries = 5;
+                    const retryDelay = 2500; // 2.5 seconds
                     
                     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-                        const queryResponse = await fetch(getSalesforceQueryUrl(`SELECT+Id%2CJira_Link__c+FROM+Feedback__c+ORDER+BY+CreatedDate+DESC+LIMIT+1`), {
+                        console.log(`[SDD:Feedback] INFO | Attempt ${attempt}/${maxRetries} to fetch JIRA link for feedback ${feedbackId}`);
+                        
+                        // Query for the specific record that was just created using its ID
+                        const queryResponse = await fetch(getSalesforceQueryUrl(`SELECT+Id%2CJira_Link__c+FROM+Feedback__c+WHERE+Id%3D%27${feedbackId}%27`), {
                             method: 'GET',
                             headers: {
                                 'Authorization': `Bearer ${accessToken}`,
@@ -631,16 +653,35 @@ export class FeedbackService {
                             const queryData = await queryResponse.json();
                             
                             if (queryData.records && queryData.records.length > 0) {
-                                const latestRecord = queryData.records[0];
+                                const createdRecord = queryData.records[0];
+                                console.log(`[SDD:Feedback] INFO | Jira_Link__c value:`, createdRecord.Jira_Link__c);
                                 
-                                if (latestRecord.Jira_Link__c && latestRecord.Jira_Link__c !== 'TBD') {
-                                    jiraUrl = latestRecord.Jira_Link__c;
-                                    // Extract JIRA ticket number from URL - supports any project key format (GAI-572, DEVSECOPS-14936, etc.)
-                                    const jiraUrlMatch = latestRecord.Jira_Link__c.match(CONFIG.jira.ticketPattern);
-                                    if (jiraUrlMatch) {
-                                        jiraTicketNumber = jiraUrlMatch[1];
-                                        break; // Success! Exit retry loop
+                                if (createdRecord.Jira_Link__c && createdRecord.Jira_Link__c.trim() !== '') {
+                                    if (createdRecord.Jira_Link__c === 'TBD') {
+                                        // TBD is a temporary placeholder - continue retrying unless it's the last attempt
+                                        console.log(`[SDD:Feedback] INFO | JIRA link is currently TBD (attempt ${attempt}/${maxRetries}), will retry...`);
+                                        if (attempt === maxRetries) {
+                                            // Only on the LAST attempt, treat TBD as final state
+                                            console.log('[SDD:Feedback] WARN | JIRA link still TBD after all retries - treating as final');
+                                            isTBD = true;
+                                            jiraTicketNumber = 'TBD';
+                                            jiraUrl = 'TBD';
+                                        }
+                                        // Continue to next retry attempt
+                                    } else {
+                                        jiraUrl = createdRecord.Jira_Link__c;
+                                        // Extract JIRA ticket number from URL - supports any project key format (GAI-572, DEVSECOPS-14936, etc.)
+                                        const jiraUrlMatch = createdRecord.Jira_Link__c.match(CONFIG.jira.ticketPattern);
+                                        if (jiraUrlMatch) {
+                                            jiraTicketNumber = jiraUrlMatch[1];
+                                            console.log(`[SDD:Feedback] INFO | Successfully extracted JIRA ticket: ${jiraTicketNumber}`);
+                                            break; // Success! Exit retry loop
+                                        } else {
+                                            console.log(`[SDD:Feedback] WARN | JIRA link found but couldn't extract ticket ID: ${createdRecord.Jira_Link__c}`);
+                                        }
                                     }
+                                } else {
+                                    console.log(`[SDD:Feedback] INFO | JIRA link is null or empty, waiting...`);
                                 }
                             }
                         }
@@ -648,18 +689,26 @@ export class FeedbackService {
                         // Wait before next attempt (except for the last attempt)
                         if (attempt < maxRetries) {
                             await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        } else {
+                            console.log(`[SDD:Feedback] WARN | Max retries reached, using fallback Salesforce ID: ${feedbackId}`);
                         }
                     }
                 } catch (error) {
+                    console.error('[SDD:Feedback] ERROR | Error fetching JIRA link:', error);
                     // Continue with Salesforce ID as fallback
                 }
 
+                const devsecopsHubUrl = `https://ciscolearningservices--clnuat4.sandbox.lightning.force.com/lightning/r/Feedback__c/${feedbackId}/view`;
+
                 return {
                     success: true,
-                    message: 'Feature submitted to Salesforce successfully!',
+                    message: 'Feature submitted to Hub successfully!',
                     ticketId: jiraTicketNumber,
                     jiraUrl: jiraUrl,
-                    timestamp: new Date().toISOString()
+                    feedbackId: feedbackId,
+                    devsecopsHubUrl: devsecopsHubUrl,
+                    timestamp: new Date().toISOString(),
+                    isTBD: isTBD // Include TBD flag in the result
                 };
             } else {
                 // More detailed error handling
@@ -1178,6 +1227,381 @@ export class FeedbackService {
                 sprints: [],
                 autoPopulated: false,
                 fallbackReason: `Error: ${(error as Error).message}`
+            };
+        }
+    }
+
+    /**
+     * Get Quick Feedback Initiative and Epic IDs using hybrid approach:
+     * 1. Use hardcoded IDs from config (fastest - no validation needed)
+     * 2. If submission fails with hardcoded IDs, fetch from API and cache
+     */
+    private async getQuickFeedbackIds(accessToken: string): Promise<{ initiativeId: string; epicId: string }> {
+        // Step 1: Check cache first (if exists and not expired)
+        const cachedInitiativeId = this.context.globalState.get<string>('quickFeedback.initiativeId');
+        const cachedEpicId = this.context.globalState.get<string>('quickFeedback.epicId');
+        const cacheTimestamp = this.context.globalState.get<number>('quickFeedback.cacheTimestamp');
+        
+        // If cache exists and is valid, use it
+        const isCacheValid = cachedInitiativeId && cachedEpicId && cacheTimestamp && 
+            (Date.now() - cacheTimestamp < CONFIG.quickFeedback.cache.ttl);
+        
+        if (isCacheValid) {
+            console.log('[SDD:Feedback] INFO | Using cached Quick Feedback IDs');
+            return { initiativeId: cachedInitiativeId!, epicId: cachedEpicId! };
+        }
+        
+        // Step 2: Use hardcoded IDs (no validation - trust the config)
+        const hardcodedInitiativeId = CONFIG.quickFeedback.defaults.initiativeId;
+        const hardcodedEpicId = CONFIG.quickFeedback.defaults.epicId;
+        
+        console.log('[SDD:Feedback] INFO | Using hardcoded Quick Feedback IDs (no validation for speed):', { 
+            initiativeId: hardcodedInitiativeId, 
+            epicId: hardcodedEpicId 
+        });
+        
+        return { initiativeId: hardcodedInitiativeId, epicId: hardcodedEpicId };
+    }
+    
+    /**
+     * Fallback method to fetch and cache Quick Feedback IDs from API
+     * Called when hardcoded IDs fail during submission
+     */
+    private async fetchAndCacheQuickFeedbackIds(): Promise<{ initiativeId: string; epicId: string }> {
+        console.log('[SDD:Feedback] INFO | Fetching Quick Feedback IDs from API (hardcoded IDs failed)...');
+        
+        const initiatives = await this.getInitiatives();
+        const aiSecurityInitiative = initiatives.find(init => 
+            init.name === CONFIG.quickFeedback.defaults.initiativeName || 
+            init.name === 'AI-Security'  // Fallback for old naming
+        );
+        
+        if (!aiSecurityInitiative) {
+            const availableNames = initiatives.map(i => i.name).join(', ');
+            throw new Error(`${CONFIG.quickFeedback.defaults.initiativeName} initiative not found. Available: ${availableNames}`);
+        }
+        
+        const epics = await this.getEpics();
+        const hubFeedbackEpic = epics.find(epic => epic.name === CONFIG.quickFeedback.defaults.epicName);
+        
+        if (!hubFeedbackEpic) {
+            const availableNames = epics.map(e => e.name).join(', ');
+            throw new Error(`${CONFIG.quickFeedback.defaults.epicName} epic not found. Available: ${availableNames}`);
+        }
+        
+        // Cache the fetched IDs
+        await this.context.globalState.update('quickFeedback.initiativeId', aiSecurityInitiative.id);
+        await this.context.globalState.update('quickFeedback.epicId', hubFeedbackEpic.id);
+        await this.context.globalState.update('quickFeedback.cacheTimestamp', Date.now());
+        
+        console.log('[SDD:Feedback] INFO | Fetched and cached Quick Feedback IDs:', {
+            initiativeId: aiSecurityInitiative.id,
+            epicId: hubFeedbackEpic.id
+        });
+        
+        return { initiativeId: aiSecurityInitiative.id, epicId: hubFeedbackEpic.id };
+    }
+
+    /**
+     * Submit SDD quick feedback with fixed Initiative and Epic
+     */
+    public async submitSddFeedback(feedbackData: QuickFeedbackData, userEmail: string): Promise<FeedbackSubmissionResult> {
+        try {
+            console.log('[SDD:Feedback] INFO | Submitting quick feedback:', feedbackData);
+
+            // Get Salesforce access token
+            const accessToken = await this.getAccessTokenWithRetryAndProtection();
+
+            // Get user information for assignee field
+            const username = await this.userService.getUsernameFromEmail();
+
+            // Try to get IDs using hybrid approach (hardcoded -> cache -> API lookup)
+            const { initiativeId, epicId } = await this.getQuickFeedbackIds(accessToken);
+
+            // Prepare Salesforce payload
+            const salesforcePayload: any = {
+                Name: feedbackData.title,
+                Description__c: feedbackData.description,
+                Jira_Acceptance_Criteria__c: feedbackData.acceptanceCriteria,
+                Type__c: feedbackData.jiraType,
+                Jira_Priority__c: feedbackData.jiraPriority,
+                Work_Type__c: feedbackData.workType,
+                Initiative__c: initiativeId,
+                Epic__c: epicId,
+                Delivery_Lifecycle__c: feedbackData.deliveryLifecycle,
+                SDD_Feedback__c: true, // Mark as Quick Feedback
+                From_External_VS__c: true,
+                Assignee_through_VS__c: username,
+                Estimated_Effort_Hours__c: 80 // Default: 10 days × 8 business hours
+            };
+
+            // Add estimation date if provided
+            if (feedbackData.estimationDate) {
+                salesforcePayload.Estimation_Completion_Date__c = feedbackData.estimationDate;
+            }
+
+            console.log('[SDD:Feedback] INFO | Submitting quick feedback to Salesforce:', salesforcePayload);
+
+            const response = await fetch(getSalesforceApiUrl(CONFIG.api.endpoints.feedback + '/'), {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(salesforcePayload)
+            });
+
+            let result;
+            try {
+                result = await response.json();
+            } catch (parseError) {
+                const responseText = await response.text();
+                console.error('[SDD:Feedback] ERROR | Failed to parse Salesforce response:', responseText);
+                throw new Error(`Invalid response from Salesforce: ${response.status} ${response.statusText}`);
+            }
+
+            console.log('[SDD:Feedback] INFO | Salesforce response:', { status: response.status, result });
+
+            if (response.ok && result.success) {
+                const feedbackId = result.id;
+                let jiraTicketNumber = feedbackId;
+                let isTBD = false;
+                let jiraUrl: string | undefined;
+                
+                try {
+                    // Retry logic to wait for JIRA ticket creation
+                    const maxRetries = 5;
+                    const retryDelay = 2500;
+                    
+                    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                        const queryResponse = await fetch(getSalesforceQueryUrl(`SELECT+Id%2CJira_Link__c+FROM+Feedback__c+WHERE+Id%3D%27${feedbackId}%27`), {
+                            method: 'GET',
+                            headers: {
+                                'Authorization': `Bearer ${accessToken}`,
+                                'Content-Type': 'application/json'
+                            }
+                        });
+
+                        if (queryResponse.ok) {
+                            const queryData = await queryResponse.json();
+                            
+                            if (queryData.records && queryData.records.length > 0) {
+                                const createdRecord = queryData.records[0];
+                                
+                                if (createdRecord.Jira_Link__c && createdRecord.Jira_Link__c.trim() !== '') {
+                                    if (createdRecord.Jira_Link__c === 'TBD') {
+                                        if (attempt === maxRetries) {
+                                            isTBD = true;
+                                            jiraTicketNumber = 'TBD';
+                                            jiraUrl = 'TBD';
+                                        }
+                                    } else {
+                                        jiraUrl = createdRecord.Jira_Link__c;
+                                        const jiraUrlMatch = createdRecord.Jira_Link__c.match(CONFIG.jira.ticketPattern);
+                                        if (jiraUrlMatch) {
+                                            jiraTicketNumber = jiraUrlMatch[1];
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        if (attempt < maxRetries) {
+                            await new Promise(resolve => setTimeout(resolve, retryDelay));
+                        }
+                    }
+                } catch (error) {
+                    console.error('[SDD:Feedback] ERROR | Error fetching JIRA link:', error);
+                }
+
+                const devsecopsHubUrl = `https://ciscolearningservices--clnuat4.sandbox.lightning.force.com/lightning/r/Feedback__c/${feedbackId}/view`;
+
+                return {
+                    success: true,
+                    message: 'Quick feedback submitted successfully!',
+                    ticketId: jiraTicketNumber,
+                    jiraUrl: jiraUrl,
+                    feedbackId: feedbackId,
+                    devsecopsHubUrl: devsecopsHubUrl,
+                    timestamp: new Date().toISOString(),
+                    isTBD: isTBD
+                };
+            } else {
+                console.error('[SDD:Feedback] ERROR | Detailed Salesforce error:', JSON.stringify(result, null, 2));
+                
+                let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+                if (Array.isArray(result) && result.length > 0) {
+                    const errors = result.map((err: any) => {
+                        if (err.errorCode && err.message) {
+                            return `${err.errorCode}: ${err.message}`;
+                        }
+                        return JSON.stringify(err);
+                    }).join('; ');
+                    errorMsg = errors;
+                } else if (result && result.errors && result.errors.length > 0) {
+                    const errors = result.errors.map((err: any) => `${err.statusCode}: ${err.message}`).join(', ');
+                    errorMsg = errors;
+                } else if (result && result.message) {
+                    errorMsg = result.message;
+                }
+                
+                throw new Error(errorMsg);
+            }
+
+        } catch (error) {
+            console.error('[SDD:Feedback] ERROR | Quick feedback submission failed:', error);
+            return {
+                success: false,
+                message: `Failed to submit quick feedback: ${(error as Error).message}`,
+                error: (error as Error).message,
+                timestamp: new Date().toISOString()
+            };
+        }
+    }
+
+    /**
+     * Retrieve user's quick feedback (SDD_Feedback__c = true)
+     */
+    public async retrieveQuickFeedback(options: any = {}): Promise<{ feedbacks: any[]; totalCount: number; hasMore: boolean }> {
+        try {
+            console.log('[SDD:Feedback] INFO | Retrieving quick feedback with options:', options);
+
+            // Get user email and username
+            const userEmail = await this.userService.getUserEmail();
+            const username = await this.userService.getUsernameFromEmail();
+            
+            if (!userEmail) {
+                throw new Error('User email not configured. Please configure your email to retrieve quick feedback.');
+            }
+
+            // Get Salesforce access token
+            const accessToken = await this.getAccessTokenWithRetryAndProtection();
+
+            const offset = options.offset || 0;
+            const limit = options.limit || 10;
+            const searchTerm = options.searchTerm || '';
+
+            // Build WHERE clause with user filter (email OR assignee) - consistent with task service
+            let whereClause = `WHERE SDD_Feedback__c = true AND (CreatedBy.Email = '${userEmail}' OR Assignee_through_VS__c = '${username}')`;
+            
+            if (searchTerm) {
+                // Escape single quotes for SOQL (consistent with task service)
+                const escapedSearchTerm = searchTerm.trim().replace(/'/g, "\\'");
+                // Note: Description__c is excluded from LIKE search as it's a long text field that cannot be filtered
+                whereClause += ` AND (Name LIKE '%${escapedSearchTerm}%' OR Jira_Link__c LIKE '%${escapedSearchTerm}%')`;
+            }
+
+            // Build query - get quick feedback for current user (by email OR assignee)
+            const query = `SELECT Id,Name,Description__c,Jira_Link__c,Status__c,Type__c,Estimated_Effort_Hours__c,Jira_Priority__c,Jira_Acceptance_Criteria__c,` +
+                        `Work_Type__c,Jira_Component__c,Jira_Sprint_Details__c,Actual_Effort_Hours__c,Resolution__c,Epic__c,Deployment_Date__c,AI_Adopted__c,` +
+                        `CreatedBy.Email,Assignee_through_VS__c ` +
+                        `FROM Feedback__c ` +
+                        `${whereClause} ` +
+                        `ORDER BY CreatedDate DESC ` +
+                        `LIMIT ${limit} OFFSET ${offset}`;
+
+            const encodedQuery = encodeURIComponent(query);
+
+            console.log('[SDD:Feedback] INFO | Quick feedback query:', query);
+
+            const response = await fetch(getSalesforceQueryUrl(encodedQuery), {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                let errorDetails = `${response.status} ${response.statusText}`;
+                try {
+                    const errorBody = await response.text();
+                    console.error('[SDD:Feedback] ERROR | Salesforce error response:', errorBody);
+                    errorDetails += ` - ${errorBody}`;
+                } catch (e) {
+                    // Ignore error reading response body
+                }
+                throw new Error(`Failed to retrieve quick feedback: ${errorDetails}`);
+            }
+
+            const data = await response.json();
+            
+            // Get total count for pagination
+            const countQuery = encodeURIComponent(
+                `SELECT COUNT() FROM Feedback__c ${whereClause}`
+            );
+            
+            let totalCount = data.records?.length || 0;
+            try {
+                const countResponse = await fetch(getSalesforceQueryUrl(countQuery), {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${accessToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (countResponse.ok) {
+                    const countData = await countResponse.json();
+                    totalCount = countData.totalSize || 0;
+                }
+            } catch (error) {
+                console.warn('[SDD:Feedback] WARN | Failed to get quick feedback total count, using records length');
+            }
+
+            const feedbacks = data.records || [];
+            const hasMore = (offset + limit) < totalCount;
+
+            console.log(`[SDD:Feedback] INFO | Retrieved ${feedbacks.length} quick feedback items (total: ${totalCount})`);
+
+            return {
+                feedbacks: feedbacks,
+                totalCount: totalCount,
+                hasMore: hasMore
+            };
+
+        } catch (error) {
+            console.error('[SDD:Feedback] ERROR | Failed to retrieve quick feedback:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Delete quick feedback by ID
+     */
+    public async deleteQuickFeedback(feedbackId: string): Promise<{ success: boolean; message: string }> {
+        try {
+            console.log('[SDD:Feedback] INFO | Deleting quick feedback:', feedbackId);
+
+            // Get Salesforce access token
+            const accessToken = await this.getAccessTokenWithRetryAndProtection();
+
+            const response = await fetch(getSalesforceApiUrl(`${CONFIG.api.endpoints.feedback}/${feedbackId}`), {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (response.ok || response.status === 204) {
+                console.log('[SDD:Feedback] INFO | Quick feedback deleted successfully');
+                return {
+                    success: true,
+                    message: 'Quick feedback deleted successfully'
+                };
+            } else {
+                const errorText = await response.text();
+                console.error('[SDD:Feedback] ERROR | Failed to delete quick feedback:', errorText);
+                throw new Error(`Failed to delete: ${response.status} ${response.statusText}`);
+            }
+
+        } catch (error) {
+            console.error('[SDD:Feedback] ERROR | Delete quick feedback failed:', error);
+            return {
+                success: false,
+                message: `Failed to delete quick feedback: ${(error as Error).message}`
             };
         }
     }

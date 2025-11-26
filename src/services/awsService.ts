@@ -209,10 +209,10 @@ export class AWSService {
         this.logConnectionStep('=== Starting AWS Connection ===');
         
         try {
-            // Show progress indicator
+            // Show progress indicator with simplified message
             return await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
-                title: "Connecting to AWS...",
+                title: "Connecting to AWS",
                 cancellable: false
             }, async (progress) => {
                 
@@ -229,7 +229,7 @@ export class AWSService {
                     this.logConnectionStep('Refreshing existing AWS connection');
                 }
 
-                progress.report({ increment: 10, message: "Checking AWS CLI installation..." });
+                progress.report({ increment: 10, message: "Validating credentials..." });
                 this.logConnectionStep('Step 1/5: Checking AWS CLI installation...');
 
                 // 1. Check AWS CLI installation
@@ -241,7 +241,7 @@ export class AWSService {
                 }
                 this.logConnectionStep('✓ AWS CLI is installed');
 
-                progress.report({ increment: 20, message: "Validating credentials..." });
+                progress.report({ increment: 30, message: "Authenticating..." });
                 this.logConnectionStep('Step 2/5: Validating AWS credentials...');
 
                 // Log configured profile and region
@@ -261,7 +261,7 @@ export class AWSService {
                     throw new Error(error.message);
                 }
 
-                progress.report({ increment: 30, message: "Fetching account info..." });
+                progress.report({ increment: 50, message: "Fetching credentials..." });
                 this.logConnectionStep('Step 3/5: Fetching AWS account information...');
 
                 const callerIdentity = await this.getAWSCallerIdentity();
