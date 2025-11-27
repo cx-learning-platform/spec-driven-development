@@ -1332,7 +1332,7 @@ export class FeedbackService {
                 SDD_Feedback__c: true, // Mark as Quick Feedback
                 From_External_VS__c: true,
                 Assignee_through_VS__c: username,
-                Estimated_Effort_Hours__c: 80 // Default: 10 days × 8 business hours
+                Estimated_Effort_Hours__c: CONFIG.quickFeedback.defaults.estimationHours
             };
 
             // Add estimation date if provided
