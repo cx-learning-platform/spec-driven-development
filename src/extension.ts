@@ -1817,12 +1817,18 @@ function registerCommands(context: vscode.ExtensionContext) {
 
     const editTaskCommand = vscode.commands.registerCommand('specDrivenDevelopment.editTask', async (taskData: any) => {
         try {
-            const { taskId } = taskData;
-            console.log('[SDD:Core] INFO | Edit task command triggered for:', taskId, taskData);
+            console.log('[SDD:Core] INFO | Edit task command triggered with data:', JSON.stringify(taskData, null, 2));
+            const { taskId, Id } = taskData;
+            const actualTaskId = taskId || Id;
+            console.log('[SDD:Core] INFO | Task ID extracted:', actualTaskId);
             
             // Send task data to webview for comprehensive editing
             if (specDrivenDevelopmentPanel) {
+                console.log('[SDD:Core] INFO | Sending task data to webview for editing');
                 specDrivenDevelopmentPanel.showTaskEditForm(taskData);
+            } else {
+                console.error('[SDD:Core] ERROR | specDrivenDevelopmentPanel is null');
+                vscode.window.showErrorMessage('Failed to open edit form: Panel not available');
             }
         } catch (error) {
             console.error('[SDD:Core] ERROR | Error in editTaskCommand:', error);
@@ -1852,6 +1858,8 @@ function registerCommands(context: vscode.ExtensionContext) {
                     // Default to running tasks list
                     vscode.commands.executeCommand('specDrivenDevelopment.retrieveRunningTasks');
                 }
+                // Also refresh Quick Feedback list in case it was a feedback item
+                vscode.commands.executeCommand('specDrivenDevelopment.retrieveQuickFeedback');
             } else {
                 vscode.window.showErrorMessage(`❌ Failed to update task: ${result.message}`);
             }
@@ -1896,13 +1904,36 @@ function registerCommands(context: vscode.ExtensionContext) {
             const { taskId, taskName } = taskData;
             console.log('[SDD:Core] INFO | Marking task as Done in Salesforce:', taskId, taskName);
             
-            // Retrieve full task object to get CreatedDate and other fields
-            const wipResult = await taskService.retrieveWipTasks({ limit: 1000 });
-            const fullTask = wipResult.tasks.find((t: any) => t.Id === taskId);
+            // Try to retrieve full task object from WIP list first
+            let fullTask: any = null;
+            try {
+                const wipResult = await taskService.retrieveWipTasks({ limit: 1000 });
+                fullTask = wipResult.tasks.find((t: any) => t.Id === taskId);
+                if (fullTask) {
+                    console.log('[SDD:Core] INFO | Task found in WIP list');
+                }
+            } catch (error) {
+                console.log('[SDD:Core] INFO | Task not in WIP list, checking Quick Feedback...');
+            }
+            
+            // If not found in WIP, try Quick Feedback
+            if (!fullTask) {
+                try {
+                    const feedbackResult = await feedbackService.retrieveQuickFeedback({ limit: 1000 });
+                    fullTask = feedbackResult.feedbacks.find((f: any) => f.Id === taskId);
+                    if (fullTask) {
+                        console.log('[SDD:Core] INFO | Task found in Quick Feedback:', fullTask);
+                    }
+                } catch (error) {
+                    console.log('[SDD:Core] INFO | Task not in Quick Feedback either');
+                }
+            }
             
             if (!fullTask) {
-                throw new Error('Task not found in WIP list');
+                throw new Error('Task not found in WIP list or Quick Feedback');
             }
+            
+            console.log('[SDD:Core] INFO | Full task data for cleanup:', JSON.stringify(fullTask, null, 2));
             
             // Extract ticket number from Jira link
             const ticketNumber = taskService.extractTicketNumber(fullTask.Jira_Link__c);
@@ -1910,6 +1941,8 @@ function registerCommands(context: vscode.ExtensionContext) {
             // Calculate actual hours and deployment date for confirmation dialog
             const actualHours = taskService.calculateActualHours(fullTask.CreatedDate || new Date().toISOString());
             const deploymentDate = new Date().toISOString().split('T')[0];
+            
+            console.log('[SDD:Core] INFO | Calculated values - Actual Hours:', actualHours, 'Deployment Date:', deploymentDate, 'CreatedDate:', fullTask.CreatedDate);
             
             // Show confirmation dialog with ticket details
             const confirmMessage = `Are you sure you want to submit ticket ${ticketNumber}?\n\nActual Hours: ${actualHours}\nDeployment Date: ${deploymentDate}`;
@@ -1935,6 +1968,8 @@ function registerCommands(context: vscode.ExtensionContext) {
             
             if (result.success) {
                 vscode.window.showInformationMessage(`✅ Ticket ${ticketNumber} marked as done successfully!`);
+                // Refresh Quick Feedback list if this was a feedback item
+                vscode.commands.executeCommand('specDrivenDevelopment.retrieveQuickFeedback');
             } else {
                 vscode.window.showErrorMessage(`❌ Failed to mark ticket as Done: ${result.message}`);
             }

@@ -448,7 +448,7 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                             <button class="tab-button active" data-tab="aws-config">Configurations</button>
                             <button class="tab-button" data-tab="feedback">Manage Features</button>
                             <button class="tab-button" data-tab="devsecops-hub">My Task List</button>
-                            <button class="tab-button" data-tab="quick-feedback">Quick Feedback</button>
+                            <button class="tab-button" data-tab="quick-feedback">Feedback</button>
                         </div>
                         
                         <!-- Configurations Tab -->
@@ -708,134 +708,6 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                         </div>
                                     </div>
                                 </div>
-
-                                <!-- Task Edit Modal -->
-                                <div class="task-edit-modal" id="task-edit-modal" style="display: none;">
-                                    <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h3>Edit Task</h3>
-                                            <button class="close-btn" id="close-edit-modal">×</button>
-                                        </div>
-                                        <div class="modal-body">
-                                            <form id="task-edit-form">
-                                                <div class="input-group">
-                                                    <label for="edit-task-name">Name:</label>
-                                                    <input type="text" id="edit-task-name" required />
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-task-description">Description:</label>
-                                                    <textarea id="edit-task-description" rows="4"></textarea>
-                                                </div>
-                                                
-                                                <!-- AI-Adopted Toggle Switch -->
-                                                <div class="input-group">
-                                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                                                        <label for="edit-ai-adopted" style="margin: 0; font-weight: 500;">AI-Adopted</label>
-                                                        <label class="toggle-switch">
-                                                            <input type="checkbox" id="edit-ai-adopted" checked />
-                                                            <span class="toggle-slider"></span>
-                                                        </label>
-                                                    </div>
-                                                    <div style="color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 4px;">
-                                                        Indicates if AI was used in the development
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-estimated-hours">Estimated Hours:</label>
-                                                    <div class="estimation-input-group">
-                                                        <input type="number" id="edit-estimated-hours" step="0.5" min="0" placeholder="e.g. 8 or 8.5 hours" />
-                                                        <select id="edit-estimation-unit">
-                                                            <option value="hours">Hours</option>
-                                                            <option value="days">Days</option>
-                                                            <option value="weeks">Weeks</option>
-                                                            <option value="months">Months</option>
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-task-type">Type:</label>
-                                                    <select id="edit-task-type" disabled>
-                                                        <option value="Story">Story</option>
-                                                        <option value="Bug">Bug</option>
-                                                        <option value="Defect">Defect</option>
-                                                    </select>
-                                                    <small style="color: #888; font-size: 0.85em;">Type cannot be changed after creation</small>
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-task-priority">Priority:</label>
-                                                    <select id="edit-task-priority">
-                                                        <option value="Severe-P1">Severe-P1</option>
-                                                        <option value="Critical-P2">Critical-P2</option>
-                                                        <option value="Major-P3">Major-P3</option>
-                                                        <option value="Minor-P4">Minor-P4</option>
-                                                    </select>
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-work-type">Work Type:</label>
-                                                    <select id="edit-work-type">
-                                                        <option value="">Select Work Type...</option>
-                                                        <option value="New Functionality / Feature">New Functionality / Feature</option>
-                                                        <option value="RTB">RTB</option>
-                                                        <option value="Enabler / Innovation">Enabler / Innovation</option>
-                                                        <option value="Quality">Quality</option>
-                                                    </select>
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-task-status">Status:</label>
-                                                    <select id="edit-task-status">
-                                                        <option value="Backlog">Backlog</option>
-                                                        <option value="In Development">In Development</option>
-                                                        <option value="QA">QA</option>
-                                                        <option value="Done">Done</option>
-                                                    </select>
-                                                </div>
-                                                
-                                                <!-- Fields shown when Status = Done -->
-                                                <div class="input-group" id="deployment-date-group" style="display: none;">
-                                                    <label for="edit-deployment-date">Deployment Date: <span class="required">*</span></label>
-                                                    <input type="date" id="edit-deployment-date" />
-                                                </div>
-                                                
-                                                <div class="input-group" id="actual-hours-group" style="display: none;">
-                                                    <label for="edit-actual-hours">Actual Hours: <span class="required">*</span></label>
-                                                    <input type="number" id="edit-actual-hours" step="0.5" min="0" placeholder="e.g., 12.5" />
-                                                </div>
-                                                
-                                                <div class="input-group" id="resolution-group" style="display: none;">
-                                                    <label for="edit-resolution">Jira Resolution: <span class="required">*</span></label>
-                                                    <select id="edit-resolution">
-                                                        <option value="">Select Resolution...</option>
-                                                        <option value="Fixed">Fixed</option>
-                                                        <option value="Done">Done</option>
-                                                        <option value="Won't Fix">Won't Fix</option>
-                                                        <option value="Duplicate">Duplicate</option>
-                                                        <option value="Cannot Reproduce">Cannot Reproduce</option>
-                                                        <option value="Incomplete">Incomplete</option>
-                                                        <option value="Won't Do">Won't Do</option>
-                                                    </select>
-                                                </div>
-                                                
-                                                <div class="input-group">
-                                                    <label for="edit-acceptance-criteria">Acceptance Criteria:</label>
-                                                    <textarea id="edit-acceptance-criteria" rows="3"></textarea>
-                                                </div>
-                                                
-                                                <input type="hidden" id="edit-task-id" />
-                                                <input type="hidden" id="edit-epic-id" />
-                                            </form>
-                                        </div>
-                                        <div class="modal-footer">
-                                            <button class="secondary-button" id="cancel-edit-btn">Cancel</button>
-                                            <button class="primary-button" id="save-task-btn">Save Changes</button>
-                                        </div>
-                                    </div>
-                                </div>
                             </div>
                         </div>
                         
@@ -860,19 +732,29 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                                     </div>
                                     <div class="config-row">
                                         <span class="config-label">Jira Type:</span>
-                                        <span class="config-value">Story</span>
+                                        <select id="quick-feedback-type" class="config-dropdown">
+                                            <option value="Story" selected>Story</option>
+                                            <option value="Bug">Bug</option>
+                                            <option value="Defect">Defect</option>
+                                        </select>
                                     </div>
                                     <div class="config-row">
                                         <span class="config-label">Jira Priority:</span>
-                                        <span class="config-value">Major-P3</span>
+                                        <select id="quick-feedback-priority" class="config-dropdown">
+                                            <option value="Severe-P1">Severe-P1</option>
+                                            <option value="Critical-P2">Critical-P2</option>
+                                            <option value="Major-P3" selected>Major-P3</option>
+                                            <option value="Minor-P4">Minor-P4</option>
+                                        </select>
                                     </div>
                                     <div class="config-row">
                                         <span class="config-label">Work Type:</span>
-                                        <span class="config-value">RTB</span>
-                                    </div>
-                                    <div class="config-row">
-                                        <span class="config-label">Initiative:</span>
-                                        <span class="config-value">AI Security</span>
+                                        <select id="quick-feedback-work-type" class="config-dropdown">
+                                            <option value="New Functionality / Feature">New Functionality / Feature</option>
+                                            <option value="RTB" selected>RTB</option>
+                                            <option value="Enabler / Innovation">Enabler / Innovation</option>
+                                            <option value="Quality">Quality</option>
+                                        </select>
                                     </div>
                                     <div class="config-row">
                                         <span class="config-label">Epic:</span>
@@ -930,6 +812,11 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                             <div class="task-list-container" id="quick-feedback-list-container">
                                 <div class="task-list-header">
                                     <h4 id="quick-feedback-list-title">Feedback List</h4>
+                                    <!-- Segmented Control for Open/Closed -->
+                                    <div class="feedback-filter-tabs">
+                                        <button class="feedback-filter-tab active" data-filter="open">Open</button>
+                                        <button class="feedback-filter-tab" data-filter="closed">Closed</button>
+                                    </div>
                                     <div class="task-count" id="quick-feedback-count">0 feedbacks</div>
                                 </div>
                                 
@@ -1051,6 +938,134 @@ export class SpecDrivenDevelopmentPanel implements vscode.WebviewViewProvider {
                             </div>
                             <div class="modal-footer">
                                 <button class="primary-button" id="close-view-btn">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Global Modal - Task Edit Modal - Shared by My Task List and Feedback -->
+                    <div class="task-edit-modal" id="task-edit-modal" style="display: none;">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h3>Edit Task</h3>
+                                <button class="close-btn" id="close-edit-modal">×</button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="task-edit-form">
+                                    <div class="input-group">
+                                        <label for="edit-task-name">Name:</label>
+                                        <input type="text" id="edit-task-name" required />
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-task-description">Description:</label>
+                                        <textarea id="edit-task-description" rows="4"></textarea>
+                                    </div>
+                                    
+                                    <!-- AI-Adopted Toggle Switch -->
+                                    <div class="input-group">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                            <label for="edit-ai-adopted" style="margin: 0; font-weight: 500;">AI-Adopted</label>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" id="edit-ai-adopted" checked />
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                        <div style="color: var(--vscode-descriptionForeground); font-size: 12px; margin-top: 4px;">
+                                            Indicates if AI was used in the development
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-estimated-hours">Estimated Hours:</label>
+                                        <div class="estimation-input-group">
+                                            <input type="number" id="edit-estimated-hours" step="0.5" min="0" placeholder="e.g. 8 or 8.5 hours" />
+                                            <select id="edit-estimation-unit">
+                                                <option value="hours">Hours</option>
+                                                <option value="days">Days</option>
+                                                <option value="weeks">Weeks</option>
+                                                <option value="months">Months</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-task-type">Type:</label>
+                                        <select id="edit-task-type" disabled>
+                                            <option value="Story">Story</option>
+                                            <option value="Bug">Bug</option>
+                                            <option value="Defect">Defect</option>
+                                        </select>
+                                        <small style="color: #888; font-size: 0.85em;">Type cannot be changed after creation</small>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-task-priority">Priority:</label>
+                                        <select id="edit-task-priority">
+                                            <option value="Severe-P1">Severe-P1</option>
+                                            <option value="Critical-P2">Critical-P2</option>
+                                            <option value="Major-P3">Major-P3</option>
+                                            <option value="Minor-P4">Minor-P4</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-work-type">Work Type:</label>
+                                        <select id="edit-work-type">
+                                            <option value="">Select Work Type...</option>
+                                            <option value="New Functionality / Feature">New Functionality / Feature</option>
+                                            <option value="RTB">RTB</option>
+                                            <option value="Enabler / Innovation">Enabler / Innovation</option>
+                                            <option value="Quality">Quality</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-task-status">Status:</label>
+                                        <select id="edit-task-status">
+                                            <option value="Backlog">Backlog</option>
+                                            <option value="In Development">In Development</option>
+                                            <option value="QA">QA</option>
+                                            <option value="Done">Done</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <!-- Fields shown when Status = Done -->
+                                    <div class="input-group" id="deployment-date-group" style="display: none;">
+                                        <label for="edit-deployment-date">Deployment Date: <span class="required">*</span></label>
+                                        <input type="date" id="edit-deployment-date" />
+                                    </div>
+                                    
+                                    <div class="input-group" id="actual-hours-group" style="display: none;">
+                                        <label for="edit-actual-hours">Actual Hours: <span class="required">*</span></label>
+                                        <input type="number" id="edit-actual-hours" step="0.5" min="0" placeholder="e.g., 12.5" />
+                                    </div>
+                                    
+                                    <div class="input-group" id="resolution-group" style="display: none;">
+                                        <label for="edit-resolution">Jira Resolution: <span class="required">*</span></label>
+                                        <select id="edit-resolution">
+                                            <option value="">Select Resolution...</option>
+                                            <option value="Fixed">Fixed</option>
+                                            <option value="Done">Done</option>
+                                            <option value="Won't Fix">Won't Fix</option>
+                                            <option value="Duplicate">Duplicate</option>
+                                            <option value="Cannot Reproduce">Cannot Reproduce</option>
+                                            <option value="Incomplete">Incomplete</option>
+                                            <option value="Won't Do">Won't Do</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="input-group">
+                                        <label for="edit-acceptance-criteria">Acceptance Criteria:</label>
+                                        <textarea id="edit-acceptance-criteria" rows="3"></textarea>
+                                    </div>
+                                    
+                                    <input type="hidden" id="edit-task-id" />
+                                    <input type="hidden" id="edit-epic-id" />
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="secondary-button" id="cancel-edit-btn">Cancel</button>
+                                <button class="primary-button" id="save-task-btn">Save Changes</button>
                             </div>
                         </div>
                     </div>

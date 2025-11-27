@@ -17,7 +17,9 @@
         currentTaskType: null, // Track which task list is currently displayed (wip, running, archived)
         availableTasks: [], // Store available TaskMaster tasks
         currentImportedTask: null, // Store currently imported TaskMaster task for duplicate checking
-        quickFeedbackPagination: null // Store quick feedback pagination state
+        quickFeedbackPagination: null, // Store quick feedback pagination state
+        feedbackFilter: 'open', // Track current feedback filter (open/closed)
+        allQuickFeedbacks: [] // Store all feedbacks for client-side filtering
     };
 
     // Unit conversion function
@@ -42,6 +44,7 @@
     function initialize() {
         setupTabs();
         setupEventListeners();
+        setupFeedbackFilterTabs();
         initializeUIState();
         loadInitialData();
     }
@@ -2117,7 +2120,6 @@
                 handleTaskActionResult(message.data.result, message.data.action);
                 break;
             case 'showTaskEditForm':
-                console.log('Show task edit form message received:', message.data);
                 if (message.data && (message.data.taskId || message.data.Id)) {
                     showTaskEditModal(message.data);
                 } else {
@@ -2416,13 +2418,6 @@ Do you want to submit it again?`);
     }
 
     function showTaskEditModal(taskData) {
-        console.log('Showing edit modal for task:', taskData);
-        console.log('🔍 Task CreatedDate check:', {
-            hasCreatedDate: !!taskData.CreatedDate,
-            createdDateValue: taskData.CreatedDate,
-            taskDataKeys: Object.keys(taskData)
-        });
-        
         // Safeguard: Don't show modal if no valid task data
         if (!taskData || (!taskData.taskId && !taskData.Id)) {
             console.warn('No valid task data provided, not showing edit modal');
@@ -3096,11 +3091,13 @@ Do you want to submit it again?`);
         const description = document.getElementById('quick-feedback-description')?.value;
         const acceptanceCriteria = document.getElementById('quick-feedback-acceptance')?.value;
         
-        // Use hardcoded default configuration values (all fields are now read-only static text)
+        // Get dropdown values
+        const jiraType = document.getElementById('quick-feedback-type')?.value || 'Story';
+        const jiraPriority = document.getElementById('quick-feedback-priority')?.value || 'Major-P3';
+        const workType = document.getElementById('quick-feedback-work-type')?.value || 'RTB';
+        
+        // Hardcoded values (not shown in UI)
         const deliveryLifecycle = 'Production';
-        const jiraType = 'Story';
-        const jiraPriority = 'Major-P3';
-        const workType = 'RTB';
         
         // Calculate estimation date (current date + 10 business days)
         const estimationDate = addBusinessDays(new Date(), 10).toISOString().split('T')[0];
@@ -3143,7 +3140,14 @@ Do you want to submit it again?`);
         if (descriptionField) descriptionField.value = '';
         if (acceptanceField) acceptanceField.value = '';
         
-        // Note: Default configuration fields are now read-only static text (no reset needed)
+        // Reset dropdown fields to default values
+        const typeField = document.getElementById('quick-feedback-type');
+        const priorityField = document.getElementById('quick-feedback-priority');
+        const workTypeField = document.getElementById('quick-feedback-work-type');
+        
+        if (typeField) typeField.value = 'Story';
+        if (priorityField) priorityField.value = 'Major-P3';
+        if (workTypeField) workTypeField.value = 'RTB';
         
         // Clear result message
         const resultDiv = document.getElementById('quick-feedback-result');
@@ -3257,25 +3261,24 @@ Do you want to submit it again?`);
         
         if (loadingIndicator) loadingIndicator.style.display = 'none';
         
-        // Store pagination state
+        // Store all feedbacks for filtering
+        currentState.allQuickFeedbacks = feedbacks;
         currentState.quickFeedbackPagination = pagination;
         
-        // Update count
+        // Filter feedbacks based on current filter
+        const filteredFeedbacks = filterFeedbacksByStatus(feedbacks, currentState.feedbackFilter);
+        
+        // Update count - cleaner format without "open"/"closed" label
         if (feedbackCount) {
-            if (pagination && pagination.totalCount > 0) {
-                const startRecord = pagination.currentOffset + 1;
-                const endRecord = Math.min(pagination.currentOffset + feedbacks.length, pagination.totalCount);
-                feedbackCount.textContent = `${startRecord}-${endRecord} of ${pagination.totalCount} feedbacks`;
-            } else {
-                feedbackCount.textContent = `${feedbacks.length} feedback${feedbacks.length !== 1 ? 's' : ''}`;
-            }
+            feedbackCount.textContent = `${filteredFeedbacks.length} item${filteredFeedbacks.length !== 1 ? 's' : ''}`;
         }
         
-        if (feedbacks.length === 0) {
+        if (filteredFeedbacks.length === 0) {
             // Show empty state
             if (emptyState) {
+                const filterText = currentState.feedbackFilter === 'open' ? 'open' : 'closed';
                 const searchText = pagination?.searchTerm ? ` matching "${pagination.searchTerm}"` : '';
-                emptyState.innerHTML = `<p>No quick feedback found${searchText}.</p>`;
+                emptyState.innerHTML = `<p>No ${filterText} feedback found${searchText}.</p>`;
                 emptyState.style.display = 'block';
             }
             if (feedbackList) feedbackList.style.display = 'none';
@@ -3287,7 +3290,7 @@ Do you want to submit it again?`);
         if (emptyState) emptyState.style.display = 'none';
         if (feedbackList) {
             feedbackList.style.display = 'block';
-            feedbackList.innerHTML = feedbacks.map(feedback => createQuickFeedbackItemHTML(feedback)).join('');
+            feedbackList.innerHTML = filteredFeedbacks.map(feedback => createQuickFeedbackItemHTML(feedback)).join('');
             
             // Add event listeners for action buttons after a small delay to ensure DOM is ready
             setTimeout(() => {
@@ -3305,6 +3308,20 @@ Do you want to submit it again?`);
         }
     }
     
+    function filterFeedbacksByStatus(feedbacks, filter) {
+        if (filter === 'open') {
+            // Show BACKLOG, IN_PROGRESS, IN_REVIEW
+            return feedbacks.filter(f => 
+                f.Status__c !== 'Done' && f.Status__c !== 'DONE' && f.Status__c !== 'Closed'
+            );
+        } else {
+            // Show DONE/Closed
+            return feedbacks.filter(f => 
+                f.Status__c === 'Done' || f.Status__c === 'DONE' || f.Status__c === 'Closed'
+            );
+        }
+    }
+    
     function createQuickFeedbackItemHTML(feedback) {
         const ticketNumber = extractTicketNumber(feedback.Jira_Link__c);
         const description = feedback.Description__c || 'No description available';
@@ -3312,6 +3329,9 @@ Do you want to submit it again?`);
         
         const devsecopsHubUrl = `https://ciscolearningservices--clnuat4.sandbox.lightning.force.com/lightning/r/Feedback__c/${feedback.Id}/view`;
         const jiraUrl = feedback.Jira_Link__c || '#';
+        
+        // Check if feedback is closed
+        const isClosed = feedback.Status__c === 'Done' || feedback.Status__c === 'DONE' || feedback.Status__c === 'Closed';
         
         return `
             <div class="task-item" data-feedback-id="${feedback.Id}">
@@ -3328,12 +3348,24 @@ Do you want to submit it again?`);
                     </div>
                 </div>
                 <div class="task-actions">
+                    ${!isClosed ? `
+                    <button class="task-action-btn edit" data-action="edit" data-feedback-id="${feedback.Id}" data-feedback-data='${JSON.stringify(feedback).replace(/'/g, "&apos;")}'>
+                        Edit
+                    </button>
                     <button class="task-action-btn delete" data-action="delete" data-feedback-id="${feedback.Id}" data-feedback-name="${feedback.Name}" data-ticket-number="${ticketNumber}">
                         Delete
                     </button>
+                    <button class="task-action-btn cleanup" data-action="done" data-feedback-id="${feedback.Id}" data-feedback-name="${feedback.Name}">
+                        Done
+                    </button>
+                    ` : `
                     <button class="task-action-btn view" data-action="view" data-feedback-id="${feedback.Id}" data-feedback-data='${JSON.stringify(feedback).replace(/'/g, "&apos;")}'>
                         View
                     </button>
+                    <button class="task-action-btn delete" data-action="delete" data-feedback-id="${feedback.Id}" data-feedback-name="${feedback.Name}" data-ticket-number="${ticketNumber}">
+                        Delete
+                    </button>
+                    `}
                 </div>
             </div>
         `;
@@ -3355,12 +3387,34 @@ Do you want to submit it again?`);
                 console.log('[Quick Feedback] Button clicked:', action, feedbackId);
                 
                 switch (action) {
+                    case 'edit':
+                        const editFeedbackDataAttr = button.getAttribute('data-feedback-data');
+                        if (editFeedbackDataAttr && editFeedbackDataAttr.trim() !== '') {
+                            try {
+                                const feedbackData = JSON.parse(editFeedbackDataAttr.replace(/&apos;/g, "'"));
+                                vscode.postMessage({ 
+                                    command: 'editTask', 
+                                    data: feedbackData 
+                                });
+                            } catch (error) {
+                                console.error('Error parsing feedback data for edit:', error);
+                            }
+                        }
+                        break;
                     case 'delete':
                         const ticketNumber = button.getAttribute('data-ticket-number');
                         console.log('[Quick Feedback] Sending delete command:', feedbackId);
                         vscode.postMessage({ 
                             command: 'deleteQuickFeedback', 
                             data: { feedbackId, feedbackName, ticketNumber } 
+                        });
+                        break;
+                    case 'done':
+                        // Mark quick feedback as done (same functionality as WIP Tickets)
+                        console.log('[Quick Feedback] Sending done command:', feedbackId);
+                        vscode.postMessage({ 
+                            command: 'cleanupTask', 
+                            data: { taskId: feedbackId, taskName: feedbackName } 
                         });
                         break;
                     case 'view':
@@ -3431,6 +3485,29 @@ Do you want to submit it again?`);
             const searchText = pagination.searchTerm ? ` (filtered)` : '';
             paginationInfo.textContent = `Page ${currentPage} of ${totalPages}${searchText}`;
         }
+    }
+
+    // Setup feedback filter tabs
+    function setupFeedbackFilterTabs() {
+        const filterTabs = document.querySelectorAll('.feedback-filter-tab');
+        
+        filterTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                const filter = tab.getAttribute('data-filter');
+                
+                // Update active state
+                filterTabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                
+                // Update current filter
+                currentState.feedbackFilter = filter;
+                
+                // Re-render with current data
+                if (currentState.allQuickFeedbacks.length > 0) {
+                    displayQuickFeedbackList(currentState.allQuickFeedbacks, currentState.quickFeedbackPagination);
+                }
+            });
+        });
     }
 
     // Initialize when DOM is loaded

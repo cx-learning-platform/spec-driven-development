@@ -187,6 +187,38 @@
     color: var(--vscode-button-secondaryForeground);
 }
 
+/* Feedback Filter Tabs (Segmented Control) */
+.feedback-filter-tabs {
+    display: inline-flex;
+    gap: 2px;
+    background-color: transparent;
+    margin: 0 10px;
+}
+
+.feedback-filter-tab {
+    background-color: transparent;
+    color: var(--vscode-descriptionForeground);
+    border: none;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+}
+
+.feedback-filter-tab:hover:not(.active) {
+    color: var(--vscode-foreground);
+    border-bottom-color: var(--vscode-input-border);
+}
+
+.feedback-filter-tab.active {
+    color: var(--cisco-blue);
+    border-bottom-color: var(--cisco-blue);
+    font-weight: 500;
+}
+
 /* Status Styles */
 .status-section {
     margin-bottom: 20px;
@@ -1678,6 +1710,38 @@
 .config-value {
     color: var(--vscode-descriptionForeground);
     font-size: 12px;
+}
+
+.config-dropdown {
+    width: 100%;
+    padding: 6px 12px;
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--vscode-input-foreground);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+    text-align: center;
+}
+
+.config-dropdown:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.config-dropdown:focus {
+    outline: none;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--vscode-focusBorder);
+}
+
+.config-dropdown option {
+    background-color: var(--vscode-dropdown-background);
+    color: var(--vscode-dropdown-foreground);
+    text-align: left;
 }
 
 .config-input {

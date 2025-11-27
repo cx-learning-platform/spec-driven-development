@@ -1495,7 +1495,7 @@ export class FeedbackService {
             // Build query - get quick feedback for current user (by email OR assignee)
             const query = `SELECT Id,Name,Description__c,Jira_Link__c,Status__c,Type__c,Estimated_Effort_Hours__c,Jira_Priority__c,Jira_Acceptance_Criteria__c,` +
                         `Work_Type__c,Jira_Component__c,Jira_Sprint_Details__c,Actual_Effort_Hours__c,Resolution__c,Epic__c,Deployment_Date__c,AI_Adopted__c,` +
-                        `CreatedBy.Email,Assignee_through_VS__c ` +
+                        `CreatedDate,CreatedBy.Email,Assignee_through_VS__c ` +
                         `FROM Feedback__c ` +
                         `${whereClause} ` +
                         `ORDER BY CreatedDate DESC ` +
