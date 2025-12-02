@@ -20,6 +20,14 @@ export interface UserConsentPayload {
     extension_version: string;
 }
 
+export interface ToolDetectionResult {
+    taskmaster: boolean;
+    sddExtension: boolean;
+    devbox: boolean;
+    devcontainer: boolean;
+    copilotWrapper: boolean;
+}
+
 export interface TCStorageState {
     lastTCAcceptanceTimestamp?: number;
     lastConsentStatus?: 'agree' | 'disagree';
@@ -231,35 +239,63 @@ export class TermsConditionsService {
     }
 
     /**
+     * Detect individual tools in workspace and return boolean results
+     */
+    private async detectIndividualTools(): Promise<ToolDetectionResult> {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            return {
+                taskmaster: false,
+                sddExtension: false,
+                devbox: false,
+                devcontainer: false,
+                copilotWrapper: false
+            };
+        }
+
+        const rootPath = workspaceFolders[0].uri.fsPath;
+        
+        // Check for file-based tools
+        const taskmasterExists = fs.existsSync(path.join(rootPath, '.taskmaster'));
+        const sddExtensionExists = fs.existsSync(path.join(rootPath, '.spec-driven-development'));
+        const devboxExists = fs.existsSync(path.join(rootPath, '.devbox'));
+        const devcontainerExists = fs.existsSync(path.join(rootPath, '.devcontainer'));
+        
+        // Check copilot-wrapper via health check
+        const copilotWrapperHealthy = await this.isCopilotWrapperHealthy();
+        
+        return {
+            taskmaster: taskmasterExists,
+            sddExtension: sddExtensionExists,
+            devbox: devboxExists,
+            devcontainer: devcontainerExists,
+            copilotWrapper: copilotWrapperHealthy
+        };
+    }
+
+    /**
      * Detect bill of materials in workspace root
      * Files to check are configured in CONFIG.termsAndConditions.billOfMaterialsFiles
      */
     private async detectBillOfMaterials(): Promise<string[]> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-            return [];
-        }
-
-        const rootPath = workspaceFolders[0].uri.fsPath;
-        const filesToCheck = CONFIG.termsAndConditions.billOfMaterialsFiles;
+        // Use the new individual tool detection method
+        const toolDetection = await this.detectIndividualTools();
         const detectedFiles: string[] = [];
 
-        for (const file of filesToCheck) {
-            const filePath = path.join(rootPath, file);
-            try {
-                // Check if file or directory exists
-                if (fs.existsSync(filePath)) {
-                    detectedFiles.push(file);
-                }
-            } catch (error) {
-                // Ignore errors for individual file checks
-                console.error(`Error checking ${file}:`, error);
-            }
+        // Convert boolean detection results back to file names for backward compatibility
+        if (toolDetection.taskmaster) {
+            detectedFiles.push('.taskmaster');
         }
-
-        // Check if copilot-wrapper is healthy and add it if so
-        const isCopilotWrapperHealthy = await this.isCopilotWrapperHealthy();
-        if (isCopilotWrapperHealthy) {
+        if (toolDetection.sddExtension) {
+            detectedFiles.push('.spec-driven-development');
+        }
+        if (toolDetection.devbox) {
+            detectedFiles.push('.devbox');
+        }
+        if (toolDetection.devcontainer) {
+            detectedFiles.push('.devcontainer');
+        }
+        if (toolDetection.copilotWrapper) {
             console.log('[SDD:T&C] INFO | Copilot-wrapper is healthy - adding to bill of materials');
             detectedFiles.push('copilot-wrapper');
         } else {
@@ -403,8 +439,8 @@ export class TermsConditionsService {
             
             const billOfMaterialsString = JSON.stringify(billOfMaterialsArray);
 
-            // Prepare Salesforce payload
-            const salesforcePayload = {
+            // Prepare base Salesforce payload
+            const salesforcePayload: any = {
                 Name: userEmail,
                 Consent_Status__c: consentStatus === 'agree' ? 'Yes' : 'No',
                 Repository_Name__c: repositoryName,
@@ -412,6 +448,17 @@ export class TermsConditionsService {
                 Timestamp__c: timestamp,
                 Bill_of_Materials__c: billOfMaterialsString
             };
+
+            // Only add boolean fields if user agrees to consent
+            if (consentStatus === 'agree') {
+                const toolDetection = await this.detectIndividualTools();
+                salesforcePayload.Is_Taskmaster_in_use__c = toolDetection.taskmaster ? 'Yes' : 'No';
+                salesforcePayload.Is_SDD_extension_in_use__c = toolDetection.sddExtension ? 'Yes' : 'No';
+                salesforcePayload.Is_Devbox_in_use__c = toolDetection.devbox ? 'Yes' : 'No';
+                salesforcePayload.Is_Devcontainer_in_use__c = toolDetection.devcontainer ? 'Yes' : 'No';
+                salesforcePayload.Is_Copilot_Wrapper_in_use__c = toolDetection.copilotWrapper ? 'Yes' : 'No';
+            }
+            // When user disagrees, boolean fields are left empty (not included in payload)
 
             console.log('[SDD:T&C] DEBUG | Salesforce Payload:', JSON.stringify(salesforcePayload, null, 2));
 
