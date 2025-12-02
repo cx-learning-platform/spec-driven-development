@@ -58,7 +58,8 @@ export const CONFIG = {
             initiativeId: 'a3T01000000DEJcEAO',  // AI Security initiative
             initiativeName: 'AI Security',
             epicId: 'a5FD2000000E2vcMAC',        // DevSecOps Hub Feedback epic
-            epicName: 'DevSecOps Hub Feedback'
+            epicName: 'DevSecOps Hub Feedback',
+            estimationHours: 8  // Default estimation hours for quick feedback (1 day × 8 business hours)
         },
         // Cache settings for ID lookups (when hardcoded IDs fail)
         cache: {
